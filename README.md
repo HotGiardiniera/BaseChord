@@ -1,12 +1,10 @@
 # Chord Implementation and Enhancements
------------------------
-Authors: Chris Moirano and Yair Schiff \\
-Course: Fall 2018 Distributed Systems (CSCI-GA 3033-002) Project
+![NYU logo](Images/nyu_logo.jpg =50x)
 
-Instructor: Aurojit Panda
+<b>Authors:</b> Chris Moirano and Yair Schiff \
+<b>Course:</b> NYU Fall 2018 Distributed Systems (CSCI-GA 3033-002) Project\
+<b>Instructor:</b> Aurojit Panda
 
-This project implements the [Chord algorithm](https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf)
+This project implements the [Chord algorithm](https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf) for P2P file systems (with the proper changes noted in [Zave, 2012](https://arxiv.org/pdf/1502.06461.pdf) that make the algorithm correct).
 
-![alt text][logo]
-
-[logo]: Images/nyu_logo "NYU Logo"
+In addition to the baseline algorithm implementation, two enhancements, detailed below, are also implemented.
