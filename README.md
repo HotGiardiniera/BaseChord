@@ -1,5 +1,5 @@
 # Chord Implementation and Enhancements
-![NYU logo](Images/nyu_logo.jpg =50x)
+![NYU logo](https://github.com/HotGiardiniera/BaseChord/blob/master/Images/nyu_logo.jpg =50x)
 
 <b>Authors:</b> Chris Moirano and Yair Schiff \
 <b>Course:</b> NYU Fall 2018 Distributed Systems (CSCI-GA 3033-002) Project\

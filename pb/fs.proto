@@ -4,7 +4,7 @@ package pb;
 
 // Represents value of data object that client wants to retrieve / store
 message Data {
-  string data = 1
+  string data = 1;
 }
 
 // Represents name-value of data object that client wants to store
@@ -39,9 +39,9 @@ message Error {
 // Represents an operation result.
 message Result {
     oneof result {
-        Data d = 1;
-        Success s = 2;
-        FileNotFound f = 3;
+        Data data = 1;
+        Success success = 2;
+        FileNotFound notFound = 3;
     }
 }
 
