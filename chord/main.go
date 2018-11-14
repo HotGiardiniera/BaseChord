@@ -24,7 +24,7 @@ func main() {
 		"Seed for random number generator, values less than 0 result in use of time")
 	flag.IntVar(&clientPort, "port", 3000,
 		"Port on which server should listen to client requests")
-	flag.IntVar(&raftPort, "chord", 3001,
+	flag.IntVar(&chordPort, "chord", 3001,
 		"Port on which server should listen to Raft requests")
 	flag.Parse()
 
@@ -54,18 +54,19 @@ func main() {
 		log.Fatalf("\u001b[31mCould not create listening socket %v\u001b[0m", err)
 	}
 	// Create a new GRPC server
-	s := grpc.NewServer()
+	fs := grpc.NewServer()
 
 	// Initialize KVStore
-	store := FileSystem{C: make(chan InputChannelType), store: make(map[string]string)}
-	go serve(&store, r, &peers, id, raftPort)
+	fileSystem := FileSystem{C: make(chan InputChannelType), fileSystem: make(map[string]string)}
+	go serve(&fileSystem, r, id, chordPort)
 
-	// Tell GRPC that s will be serving requests for the KvStore service and should use store (defined on line 23)
-	// as the struct whose methods should be called in response.
-	pb.RegisterKvStoreServer(s, &store)
+	// Tell GRPC that fs will be serving requests for the fileSystem service and
+	//should use store as the struct whose methods should be
+	//called in response.
+	pb.RegisterFileSystemServer(fs, &fileSystem)
 	log.Printf("\u001b[32mGoing to listen for client requests on port %v\u001b[0m", clientPort)
 	// Start serving, this will block this function and only return when done.
-	if err := s.Serve(c); err != nil {
+	if err := fs.Serve(c); err != nil {
 		log.Fatalf("\u001b[31mFailed to serve %v\u001b[0m", err)
 	}
 	log.Printf("\u001b[34mDone listening\u001b[0m")
