@@ -38,7 +38,7 @@ func (fs *FileSystem) Store(ctx context.Context, file *pb.FileStore) (*pb.Result
 	// Create a channel
 	c := make(chan pb.Result)
 	// Create a request
-	r := pb.Command{Operation: pb.Op_SET, Arg: &pb.Command_Set{Set: file}}
+	r := pb.Command{Operation: pb.Op_STORE, Arg: &pb.Command_Store{Store: file}}
 	// Send request over the channel
 	fs.C <- InputChannelType{command: r, response: c}
 	log.Printf("Waiting for file store response...")
@@ -51,7 +51,7 @@ func (fs *FileSystem) Delete(ctx context.Context, file *pb.FileDelete) (*pb.Resu
 	// Create a channel
 	c := make(chan pb.Result)
 	// Create a request
-	r := pb.Command{Operation: pb.Op_CLEAR, Arg: &pb.Command_Clear{Clear: file}}
+	r := pb.Command{Operation: pb.Op_DELETE, Arg: &pb.Command_Delete{Delete: file}}
 	// Send request over the channel
 	fs.C <- InputChannelType{command: r, response: c}
 	log.Printf("Waiting for file deletion response...")
@@ -70,8 +70,8 @@ func (fs *FileSystem) GetInternal(file string) pb.Result {
 // StoreInternal : Used internally to set and generate an appropriate result. This
 //function assumes that it is called from a single
 //thread of execution and hence does not handle race conditions.
-func (fs *FileSystem) StoreInternal(f string, d string) pb.Result {
-	fs.fileSystem[f] = d
+func (fs *FileSystem) StoreInternal(f string, d *pb.Data) pb.Result {
+	fs.fileSystem[f] = d.Data
 	return pb.Result{Result: &pb.Result_Success{}}
 }
 
@@ -94,12 +94,12 @@ func (fs *FileSystem) HandleCommand(op InputChannelType) {
 		result := fs.GetInternal(arg.Name)
 		op.response <- result
 	case pb.Op_STORE:
-		args := c.GetStore()
+		arg := c.GetStore()
 		result := fs.StoreInternal(arg.Name, arg.Data)
 		op.response <- result
 	case pb.Op_DELETE:
-		args := c.GetDelete()
-		result := fs.ClearInternal(arg.Name)
+		arg := c.GetDelete()
+		result := fs.DeleteInternal(arg.Name)
 		op.response <- result
 	default:
 		// Sending a blank response to just free things up, but we don't know how to make progress here.
