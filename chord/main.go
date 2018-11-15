@@ -3,23 +3,27 @@ package main
 import (
 	"flag"
 	"fmt"
+	"google.golang.org/grpc"
 	"log"
 	rand "math/rand"
+	"math"
 	"net"
 	"os"
 	"time"
-
-	"google.golang.org/grpc"
+	"crypto/sha1"
 
 	"github.com/nyu-distributed-systems-fa18/BaseChord/pb"
 )
 
+const M = 7 // Max number of nodes on our ring
+
 func main() {
 	// Argument parsing
-	var r *rand.Rand
+	//var r *rand.Rand
 	var seed int64
 	var clientPort int
 	var chordPort int
+
 	flag.Int64Var(&seed, "seed", -1,
 		"Seed for random number generator, values less than 0 result in use of time")
 	flag.IntVar(&clientPort, "port", 3000,
@@ -28,12 +32,17 @@ func main() {
 		"Port on which server should listen to Raft requests")
 	flag.Parse()
 
+	/* Don't know if we need the below, so commenting it out for safe keeping
 	// Initialize the random number generator
 	if seed < 0 {
 		r = rand.New(rand.NewSource(time.Now().UnixNano()))
 	} else {
 		r = rand.New(rand.NewSource(seed))
 	}
+	*/
+	// TODO remove the line below and the import if we don't need time anymore
+	var _ = time.Now
+	var _ = rand.New
 
 	// Get hostname
 	name, err := os.Hostname()
@@ -42,8 +51,15 @@ func main() {
 		log.Fatalf("\u001b[31mCould not get hostname\u001b[0m")
 	}
 
-	id := fmt.Sprintf("%s:%d", name, chordPort)
-	log.Printf("Starting peer with ID %s", id)
+	ip := fmt.Sprintf("%s:%d", name, chordPort)
+	log.Printf("Starting peer with ID %s", ip)
+
+	// Determine generate id as a ring number
+	sha_hash := sha1.New()
+	sha_hash.Write([]byte(ip))
+	hashed := sha_hash.Sum(nil)
+	hashed64 := bytes_to_int64(hashed[:8])
+	id := truncate_bits(M, hashed64) % uint64(math.Pow(2, float64(M)))
 
 	// Convert port to a string form
 	portString := fmt.Sprintf(":%d", clientPort)
@@ -58,7 +74,7 @@ func main() {
 
 	// Initialize KVStore
 	fileSystem := FileSystem{C: make(chan InputChannelType), fileSystem: make(map[string]string)}
-	go serve(&fileSystem, r, id, chordPort)
+	go chord(&fileSystem, ip, id, chordPort)
 
 	// Tell GRPC that fs will be serving requests for the fileSystem service and
 	//should use store as the struct whose methods should be
