@@ -4,9 +4,17 @@ import (
 	"log"
 )
 
-var _ = log.Printf // TODO remove, just to get the linter to shut up
+/* ************** Chord RPCs ************** */
+
+/* **************************************** */
+
+type Chord struct {
+	ID         uint64
+	IP_address string
+	Hash       []byte
+}
 
 func chord(fs *FileSystem, ip string, id uint64, port int) {
 	//TODO Add chord implementation
-    log.Printf("Chord ARGS: %v %v %v", ip, id, port)
+	log.Printf("Chord ARGS: %v %v %v", ip, id, port)
 }

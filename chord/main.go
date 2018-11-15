@@ -1,16 +1,16 @@
 package main
 
 import (
+	"crypto/sha1"
 	"flag"
 	"fmt"
 	"google.golang.org/grpc"
 	"log"
-	rand "math/rand"
 	"math"
+	rand "math/rand"
 	"net"
 	"os"
 	"time"
-	"crypto/sha1"
 
 	"github.com/nyu-distributed-systems-fa18/BaseChord/pb"
 )
@@ -72,7 +72,7 @@ func main() {
 	// Create a new GRPC server
 	fs := grpc.NewServer()
 
-	// Initialize KVStore
+	// Initialize FileSystem
 	fileSystem := FileSystem{C: make(chan InputChannelType), fileSystem: make(map[string]string)}
 	go chord(&fileSystem, ip, id, chordPort)
 

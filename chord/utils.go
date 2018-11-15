@@ -36,3 +36,14 @@ func bytes_to_int64(bites []byte) (ret uint64) {
 func truncate_bits(m int, base_64_rep uint64) uint64 {
 	return base_64_rep & (UINT64_MAX >> (64 - uint64(m))) // Get the lower `m` bytes of an int64
 }
+
+// Between function that takes care of wrapping past 0.
+// This will not cucceed in cases where the key we are looking for is the successor
+// To handle that case (i.e in find successors) we can just first check if the key == successor
+func between(key, ID, successorID uint64) bool {
+	// If a high node's successor wrapts the ring past 0
+	if ID >= successorID { // We are wrapping
+		return (key > ID || key < successorID)
+	}
+	return key > ID && key < successorID
+}
