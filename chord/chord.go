@@ -12,7 +12,7 @@ import (
 )
 
 //PingTimeout -> milliseconds to ping a predecessor
-const PingTimeout = 2500
+const PingTimeout = 1000
 
 //PingResponse -> response opject to give a ping response channel
 type PingResponse struct {
@@ -148,9 +148,9 @@ func runChord(fs *FileSystem, ip string, id uint64, port int, debug bool) {
 		}
 		otherNode := &RingNode{ID: generateIDFromIP(sIP), IPAddress: sIP, conn: succ}
 		chord = Chord{ID: id, IPAddress: ip,
-			successor: otherNode, predecessor: otherNode}
+			successor: otherNode, predecessor: otherNode, PingChan: make(chan PingRequest)}
 	} else {
-		chord = Chord{ID: id, IPAddress: ip}
+		chord = Chord{ID: id, IPAddress: ip, PingChan: make(chan PingRequest)}
 	}
 
 	go RunChordServer(&chord, port)
@@ -161,27 +161,31 @@ func runChord(fs *FileSystem, ip string, id uint64, port int, debug bool) {
 
 	for {
 		select {
-		case <-pingResponseChan:
-			// We've recived a ping response from just respond
+		case pr := <-pingResponseChan:
+			if pr.err != nil {
+				log.Printf("Ping failed")
+			} else {
+				// We've recived a ping response from just respond
+				log.Printf("Got ping response!")
+			}
+
 		case <-pingTimer.C:
 			// We need to ping our predecessor
 			log.Printf("My ip and id: %v %v", chord.IPAddress, chord.ID)
 			if chord.successor != nil {
 				log.Printf("Attempting to ping %v", chord.predecessor.IPAddress)
-				// go func(pred pb.ChordClient, predIP string){
-				//     ret, err := pred.PingPredecessor(context.Background(), &pb.PingPredecessorArgs{})
-				//     pingResponseChan <- PingResponse{ret: ret, err: err, predecessor: predIP}
-				// }(chord.predecessor.conn, chord.predecessor.IPAddress)
-				ret, err := chord.predecessor.conn.PingPredecessor(context.Background(), &pb.PingPredecessorArgs{})
-				pingResponseChan <- PingResponse{ret: ret, err: err, predecessor: chord.predecessor.IPAddress}
+				go func(pred pb.ChordClient, predIP string) {
+					ret, err := pred.PingPredecessor(context.Background(), &pb.PingPredecessorArgs{})
+					pingResponseChan <- PingResponse{ret: ret, err: err, predecessor: predIP}
+				}(chord.predecessor.conn, chord.predecessor.IPAddress)
 			} else {
 				log.Print("No successor")
 			}
 			restartTimer(pingTimer)
 
-		case pr := <-chord.PingChan:
+		case ping := <-chord.PingChan:
 			log.Print("ping from successor")
-			pr.response <- pb.PingPredecessorRet{}
+			ping.response <- pb.PingPredecessorRet{}
 		}
 	}
 }
