@@ -22,7 +22,7 @@ type PingResponse struct {
 }
 
 /* ************** Chord RPCs ************** */
-// Launch a GRPC service for this Raft peer.
+// Launch a GRPC service for this Chord peer.
 func RunChordServer(kord *Chord, port int) {
 	// Convert port to a string form
 	portString := fmt.Sprintf(":%d", port)
