@@ -1,28 +1,30 @@
 package main
 
 import (
-	"crypto/sha1"
 	"flag"
 	"fmt"
 	"google.golang.org/grpc"
 	"log"
-	"math"
-	rand "math/rand"
+
 	"net"
 	"os"
-	"time"
 
 	"github.com/nyu-distributed-systems-fa18/BaseChord/pb"
 )
 
-const M = 7 // Max number of nodes on our ring
+// M is our max number of nodes on our ring
+const M = 7
 
 func main() {
 	// Argument parsing
-	//var r *rand.Rand
 	var seed int64
 	var clientPort int
 	var chordPort int
+
+	// Debug mode: this will force a node to assume it is joined in a ring of size 2
+	// This is mainly just to test RPCs. It will assume Node 1 is port 3001 and node 2 is 3003.
+	// in debug mode these two will only be joined together and (TODO) ignore any other joins
+	var debug bool
 
 	flag.Int64Var(&seed, "seed", -1,
 		"Seed for random number generator, values less than 0 result in use of time")
@@ -30,19 +32,9 @@ func main() {
 		"Port on which server should listen to client requests")
 	flag.IntVar(&chordPort, "chord", 3001,
 		"Port on which server should listen to Raft requests")
+	flag.BoolVar(&debug, "debug", false,
+		"Debug with two local Nodes joined in a ring of size 2.")
 	flag.Parse()
-
-	/* Don't know if we need the below, so commenting it out for safe keeping
-	// Initialize the random number generator
-	if seed < 0 {
-		r = rand.New(rand.NewSource(time.Now().UnixNano()))
-	} else {
-		r = rand.New(rand.NewSource(seed))
-	}
-	*/
-	// TODO remove the line below and the import if we don't need time anymore
-	var _ = time.Now
-	var _ = rand.New
 
 	// Get hostname
 	name, err := os.Hostname()
@@ -54,12 +46,8 @@ func main() {
 	ip := fmt.Sprintf("%s:%d", name, chordPort)
 	log.Printf("Starting peer with ID %s", ip)
 
-	// Determine generate id as a ring number
-	sha_hash := sha1.New()
-	sha_hash.Write([]byte(ip))
-	hashed := sha_hash.Sum(nil)
-	hashed64 := bytes_to_int64(hashed[:8])
-	id := truncate_bits(M, hashed64) % uint64(math.Pow(2, float64(M)))
+	// Generate id as a ring number
+	id := generateIDFromIP(ip)
 
 	// Convert port to a string form
 	portString := fmt.Sprintf(":%d", clientPort)
@@ -74,7 +62,7 @@ func main() {
 
 	// Initialize FileSystem
 	fileSystem := FileSystem{C: make(chan InputChannelType), fileSystem: make(map[string]string)}
-	go chord(&fileSystem, ip, id, chordPort)
+	go runChord(&fileSystem, ip, id, chordPort, debug)
 
 	// Tell GRPC that fs will be serving requests for the fileSystem service and
 	//should use store as the struct whose methods should be
