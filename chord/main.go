@@ -54,9 +54,10 @@ func main() {
 	// Create socket that listens on the supplied port
 	c, err := net.Listen("tcp", portString)
 	if err != nil {
-		// Note the use of Fatalf which will exit the program after reporting the error.
+		// Note the use of Fatalf which will exit program after reporting the error.
 		log.Fatalf("\u001b[31mCould not create listening socket %v\u001b[0m", err)
 	}
+
 	// Create a new GRPC server
 	fs := grpc.NewServer()
 
@@ -65,11 +66,11 @@ func main() {
 	go runChord(&fileSystem, ip, id, chordPort, debug)
 
 	// Tell GRPC that fs will be serving requests for the fileSystem service and
-	//should use store as the struct whose methods should be
-	//called in response.
+	//should use file system as struct whose methods should be called in response.
 	pb.RegisterFileSystemServer(fs, &fileSystem)
-	log.Printf("\u001b[32mGoing to listen for client requests on port %v\u001b[0m", clientPort)
-	// Start serving, this will block this function and only return when done.
+	{
+		log.Printf("\u001b[32mGoing to listen for client requests on port %v\u001b[0m", clientPort)
+	} // Start serving, this will block this function and only return when done.
 	if err := fs.Serve(c); err != nil {
 		log.Fatalf("\u001b[31mFailed to serve %v\u001b[0m", err)
 	}
