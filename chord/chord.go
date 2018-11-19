@@ -172,7 +172,6 @@ func (kord *Chord) JoinInternal(peerIP string) {
 		kord.findSuccessorResponseChan <- FindSuccessorResponse{err: err, forJoin: true}
 	} else {
 		joinReq := &pb.FindSuccessorArgs{Id: kord.ID}
-		log.Printf("Making RPC to %v", peerIP)
 		ret, fsErr := conn.FindSuccessorRPC(context.Background(), joinReq)
 		kord.findSuccessorResponseChan <- FindSuccessorResponse{ret: ret, err: fsErr, forJoin: true}
 	}
@@ -290,8 +289,8 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		pingSuccessorResponseChan:   make(chan PingSuccessorResponse),
 		findSuccessorResponseChan:   make(chan FindSuccessorResponse),
 		fixFingersResponseChan:      make(chan FindSuccessorResponse),
-		pingTimer:                   time.NewTimer(10000000 * time.Millisecond),
-		stabilizeTimer:              time.NewTimer(10000000 * time.Millisecond)}
+		pingTimer:                   time.NewTimer(PingTimeout * time.Millisecond),
+		stabilizeTimer:              time.NewTimer(StabilizeTimeout * time.Millisecond)}
 
 	if joinNode != "" {
 		chord.JoinChan <- joinNode // Leave ourselves a message to join network
@@ -303,7 +302,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 	for {
 		select {
 		// We left ourselves a message to join the network
-		case jp:= <-chord.JoinChan:
+		case jp := <-chord.JoinChan:
 			log.Printf("Attempting to join network of %v...", jp)
 			go chord.JoinInternal(jp)
 
@@ -327,15 +326,8 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				chord.successor = fsRes.ret.SuccessorId
 				chord.finger[0] = chord.successor
 				addToRing(fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp, chord.ringMap)
-				if fsRes.forJoin {
-					chord.predecessor = fsRes.ret.SuccessorId
-					// Notify our successor we've joined the network
-					notifyReq := &pb.NotifyArgs{PredecessorId: myID, PredecessorIp: myIP}
-					go chord.ringMap[chord.successor].conn.NotifyRPC(context.Background(), notifyReq)
-					// Restart timers with actual timeouts
-					restartTimer(chord.pingTimer, PingTimeout)
-					restartTimer(chord.stabilizeTimer, StabilizeTimeout)
-				}
+				notifyReq := &pb.NotifyArgs{PredecessorId: myID, PredecessorIp: myIP}
+				go chord.ringMap[chord.successor].conn.NotifyRPC(context.Background(), notifyReq)
 			}
 
 		// We received fix fingers response back from ourselves
@@ -384,27 +376,32 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 					chord.successor = pr.ret.PredecessorId
 					addToRing(pr.ret.PredecessorId, pr.ret.PredecessorIp, chord.ringMap)
 				}
-				// Do not need to notify here, b/c we've already updated our successor
-				// notifyReq := &pb.NotifyArgs{PredecessorId: myID, PredecessorIp: myIP}
-				// go chord.ringMap[chord.successor].conn.NotifyRPC(context.Background(), notifyReq)
+				notifyReq := &pb.NotifyArgs{PredecessorId: myID, PredecessorIp: myIP}
+				go chord.ringMap[chord.successor].conn.NotifyRPC(context.Background(), notifyReq)
 			}
 
 		// Stabilize timer went off
 		case <-chord.stabilizeTimer.C:
-			log.Printf("Running stabilize & fix fingers protocols...")
-			succ := chord.ringMap[chord.successor].conn
-			go chord.StabilizeInternal(succ)
-			chord.FixFingersInternal()
+			// Ignore this timer if we haven't joined the network yet
+			if chord.successor == chord.ID {
+				log.Printf("Stabilize timer went off, but we are not integrated into network yet, so ignoring it.")
+			} else {
+				log.Printf("Running stabilize & fix fingers protocols...")
+				succ := chord.ringMap[chord.successor].conn
+				go chord.StabilizeInternal(succ)
+				chord.FixFingersInternal()
+			}
 			restartTimer(chord.stabilizeTimer, StabilizeTimeout)
 
 		// Ping predecessor timer went off
 		case <-chord.pingTimer.C:
-			if chord.successor != uint64MAX {
+			// Ignore this timer if we haven't joined the network yet
+			if chord.predecessor == chord.ID {
+				log.Printf("Ping predecessor timer went off, but we are not integrated into network yet, so ignoring it.")
+			} else {
 				log.Printf("Pinging our predecessor %v:%v", chord.predecessor, chord.ringMap[chord.predecessor].IP)
 				pred := chord.ringMap[chord.predecessor].conn
 				go chord.PingPredecessorInternal(pred)
-			} else {
-				log.Printf("No successor")
 			}
 			restartTimer(chord.pingTimer, PingTimeout)
 

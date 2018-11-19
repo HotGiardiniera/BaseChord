@@ -19,7 +19,7 @@ func main() {
 	// Argument parsing
 	var clientPort int
 	var chordPort int
-	var joinIp string // Start a chord node and join to it immediately
+	var joinIP string // Start a chord node and join to it immediately
 
 	// Debug mode: this will force a node to assume it is joined in a ring of size 2
 	// This is mainly just to test RPCs. It will assume Node 1 is port 3001 and node 2 is 3003.
