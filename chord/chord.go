@@ -51,7 +51,7 @@ type Chord struct {
 	finger      [M]uint64
 	next        uint64
 	// Request channels
-	JoinChan                chan bool
+	JoinChan                chan string
 	FindSuccessorChan       chan FindSuccessorRequest
 	NotifyChan              chan NotifyRequest
 	PingFromSuccessorChan   chan PingPredecessorRequest
@@ -249,7 +249,7 @@ func (kord *Chord) PingPredecessorInternal(predecessor pb.ChordClient) {
 
 /* *********** Primary method for called by chord/main.go *********** */
 
-func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
+func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode string, debug bool) {
 	log.Printf("Chord ARGS: %v %v %v. Ring size 2^%v", myIP, myID, port, M)
 
 	// Channel that will only add/drain in debug mode
@@ -281,7 +281,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 		ringMap:                     rM,
 		finger:                      fTable,
 		next:                        0,
-		JoinChan:                    make(chan bool, 1),
+		JoinChan:                    make(chan string, 1),
 		FindSuccessorChan:           make(chan FindSuccessorRequest),
 		NotifyChan:                  make(chan NotifyRequest),
 		PingFromSuccessorChan:       make(chan PingPredecessorRequest),
@@ -293,8 +293,8 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 		pingTimer:                   time.NewTimer(10000000 * time.Millisecond),
 		stabilizeTimer:              time.NewTimer(10000000 * time.Millisecond)}
 
-	if port == 3001 {
-		chord.JoinChan <- true // Leave ourselves a message to join network
+	if joinNode != "" {
+		chord.JoinChan <- joinNode // Leave ourselves a message to join network
 	}
 
 	go RunChordServer(&chord, port)
@@ -303,13 +303,16 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 	for {
 		select {
 		// We left ourselves a message to join the network
-		case <-chord.JoinChan:
-			log.Printf("Attempting to join network...")
-			peerIP := fmt.Sprintf("127.0.0.1:%d", port+2)
-			go chord.JoinInternal(peerIP)
+		case jp:= <-chord.JoinChan:
+			log.Printf("Attempting to join network of %v...", jp)
+			go chord.JoinInternal(jp)
 
 		// We received client request
+<<<<<<< Updated upstream
 		case op := <-fs.C:
+=======
+		case op := <- fs.C:
+>>>>>>> Stashed changes
 			log.Printf("Received command from client to %v data key %v", op.command.Operation, op.command.Arg)
 			// If we are not connected to the ring yet, defer this command until later
 			if chord.successor == myID || chord.predecessor == myID {

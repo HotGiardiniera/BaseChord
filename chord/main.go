@@ -29,7 +29,7 @@ func main() {
 	flag.IntVar(&clientPort, "port", 3000,
 		"Port on which server should listen to client requests")
 	flag.IntVar(&chordPort, "chord", 3001,
-		"Port on which server should listen to Raft requests")
+		"Port on which server should listen to Chord requests")
 	flag.BoolVar(&debug, "debug", false,
 		"Allows for debug printing mechanisms")
 	flag.StringVar(&joinIp, "peer", "",
@@ -63,7 +63,7 @@ func main() {
 
 	// Initialize FileSystem
 	fileSystem := FileSystem{C: make(chan InputChannelType), fileSystem: make(map[string]string)}
-	go runChord(&fileSystem, ip, id, chordPort, debug)
+	go runChord(&fileSystem, ip, id, chordPort, joinIp, debug)
 
 	// Tell GRPC that fs will be serving requests for the fileSystem service and
 	//should use file system as struct whose methods should be called in response.
