@@ -19,6 +19,11 @@ const PingTimeout = 1000
 // StabilizeTimeout -> milliseconds to run stabilize
 const StabilizeTimeout = 3000
 
+// PowTwo raises 2 to the power of x
+func PowTwo(x uint64) uint64 {
+	return uint64(math.Pow(2, float64(x)))
+}
+
 // GenerateRandomIP generates a random 32 bit IP seeded on system time
 // Typically usage will be for local testing
 func GenerateRandomIP() string {
@@ -49,12 +54,12 @@ func truncateBits(m int, base64Rep uint64) uint64 {
 // Between function that takes care of wrapping past 0.
 // This will not succeed in cases where the key we are looking for is the successor
 // To handle that case (i.e in find successors) we can just first check if the key == successor
-func between(key, ID, successorID uint64) bool {
+func between(key, ID, successorID uint64, inclusive bool) bool {
 	// If a high node's successor wraps the ring past 0
 	if ID >= successorID { // We are wrapping
-		return key > ID || key < successorID || key == successorID
+		return key > ID || key < successorID || (inclusive && key == successorID)
 	}
-	return (key > ID && key < successorID) || key == successorID
+	return (key > ID && key < successorID) || (inclusive && key == successorID)
 }
 
 func generateIDFromIP(IP string) uint64 {
