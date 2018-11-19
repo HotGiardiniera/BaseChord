@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/nyu-distributed-systems-fa18/BaseChord/pb"
+
+	"bufio"
+	"os"
 )
 
 /* ************** Chord structs ************** */
@@ -94,7 +97,7 @@ func connectToNode(node string) (pb.ChordClient, error) {
 	backoffConfig.MaxDelay = 500 * time.Millisecond
 	conn, err := grpc.Dial(node, grpc.WithInsecure(), grpc.WithBackoffConfig(backoffConfig))
 	// Ensure connection dId not fail, which should not happen since this happens
-	//in the background
+	// in the background
 	if err != nil {
 		return pb.NewChordClient(nil), err
 	}
@@ -233,67 +236,49 @@ func (kord *Chord) PingPredecessorInternal(predecessor pb.ChordClient) {
 func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 	log.Printf("Chord ARGS: %v %v %v", myIP, myID, port)
 
+	// Channel that will only add/drain in debug mode
+	debugPrintChan := make(chan string, 1)
+
 	var chord Chord
 	var fTable [M]uint64
 	rM := map[uint64]*RingNode{myID: &RingNode{IP: myIP}}
-	if debug {
-		peerID := generateIDFromIP("127.0.0.1:3001")
-		peerIP := "127.0.0.1:3001"
-		if myID == peerID {
-			peerID = generateIDFromIP("127.0.0.1:3003")
-			peerIP = "127.0.0.1:3003"
-		}
-		// Connect to our other ring node
-		addToRing(peerID, peerIP, rM)
-		for i := 0; i < M; i++ {
-			fTable[i] = peerID
-		}
-		chord = Chord{
-			ID:                          myID,
-			IP:                          myIP,
-			successor:                   peerID,
-			predecessor:                 peerID,
-			ringMap:                     rM,
-			finger:                      fTable,
-			next:                        0,
-			JoinChan:                    make(chan bool),
-			FindSuccessorChan:           make(chan FindSuccessorRequest),
-			NotifyChan:                  make(chan NotifyRequest),
-			PingFromSuccessorChan:       make(chan PingPredecessorRequest),
-			PingFromPredecessorChan:     make(chan PingSuccessorRequest),
-			pingPredecessorResponseChan: make(chan PingPredecessorResponse),
-			pingSuccessorResponseChan:   make(chan PingSuccessorResponse),
-			findSuccessorResponseChan:   make(chan FindSuccessorResponse),
-			fixFingersResponseChan:      make(chan FindSuccessorResponse),
-			pingTimer:                   time.NewTimer(PingTimeout * time.Millisecond),
-			stabilizeTimer:              time.NewTimer(StabilizeTimeout * time.Millisecond)}
-	} else {
-		for i := 0; i < M; i++ {
-			fTable[i] = myID
-		}
-		chord = Chord{
-			ID:                          myID,
-			IP:                          myIP,
-			successor:                   myID,
-			predecessor:                 myID,
-			ringMap:                     rM,
-			finger:                      fTable,
-			next:                        0,
-			JoinChan:                    make(chan bool, 1),
-			FindSuccessorChan:           make(chan FindSuccessorRequest),
-			NotifyChan:                  make(chan NotifyRequest),
-			PingFromSuccessorChan:       make(chan PingPredecessorRequest),
-			PingFromPredecessorChan:     make(chan PingSuccessorRequest),
-			pingPredecessorResponseChan: make(chan PingPredecessorResponse),
-			pingSuccessorResponseChan:   make(chan PingSuccessorResponse),
-			findSuccessorResponseChan:   make(chan FindSuccessorResponse),
-			fixFingersResponseChan:      make(chan FindSuccessorResponse),
-			pingTimer:                   time.NewTimer(5000 * time.Millisecond),
-			stabilizeTimer:              time.NewTimer(5000 * time.Millisecond)}
 
-		if port == 3001 {
-			chord.JoinChan <- true // Leave ourselves a message to join network
-		}
+	var reader *bufio.Reader
+	_ = reader
+	if debug {
+		reader := bufio.NewReader(os.Stdin)
+		go func(reeder *bufio.Reader) {
+			for {
+				text, _ := reeder.ReadString('\n')
+				debugPrintChan <- text
+			}
+		}(reader)
+	}
+	for i := 0; i < M; i++ {
+		fTable[i] = myID
+	}
+	chord = Chord{
+		ID:                          myID,
+		IP:                          myIP,
+		successor:                   myID,
+		predecessor:                 myID,
+		ringMap:                     rM,
+		finger:                      fTable,
+		next:                        0,
+		JoinChan:                    make(chan bool, 1),
+		FindSuccessorChan:           make(chan FindSuccessorRequest),
+		NotifyChan:                  make(chan NotifyRequest),
+		PingFromSuccessorChan:       make(chan PingPredecessorRequest),
+		PingFromPredecessorChan:     make(chan PingSuccessorRequest),
+		pingPredecessorResponseChan: make(chan PingPredecessorResponse),
+		pingSuccessorResponseChan:   make(chan PingSuccessorResponse),
+		findSuccessorResponseChan:   make(chan FindSuccessorResponse),
+		fixFingersResponseChan:      make(chan FindSuccessorResponse),
+		pingTimer:                   time.NewTimer(10000000 * time.Millisecond),
+		stabilizeTimer:              time.NewTimer(10000000 * time.Millisecond)}
+
+	if port == 3001 {
+		chord.JoinChan <- true // Leave ourselves a message to join network
 	}
 
 	go RunChordServer(&chord, port)
@@ -390,6 +375,10 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 				log.Printf("No successor")
 			}
 			restartTimer(chord.pingTimer, PingTimeout)
+
+		case <-debugPrintChan:
+			log.Printf(green("%v"), chord)
 		}
+
 	}
 }

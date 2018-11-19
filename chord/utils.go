@@ -88,3 +88,45 @@ func restartTimer(timer *time.Timer, timeout int64) {
 	}
 	timer.Reset(time.Duration(timeout) * time.Millisecond)
 }
+
+/* ********************  Color Printing ******************** */
+// All color printing functions act as wrappers around strings
+// and just insert ANSII escape sequences for colors.
+// Example: green("My String") -> "\u001b[32mMystring\u001b[0m"
+
+func green(s string) string {
+	return fmt.Sprintf("\u001b[32m%s\u001b[0m", s)
+}
+
+func red(s string) string {
+	return fmt.Sprintf("u001b[31m%s\u001b[0m", s)
+}
+
+func yellow(s string) string {
+	return fmt.Sprintf("u001b[33m%s\u001b[0m", s)
+}
+
+func blue(s string) string {
+	return fmt.Sprintf("u001b[34m%s\u001b[0m", s)
+}
+
+func magenta(s string) string {
+	return fmt.Sprintf("u001b[35m%s\u001b[0m", s)
+}
+
+func cyan(s string) string {
+	return fmt.Sprintf("u001b[36m%s\u001b[0m", s)
+}
+
+/* ********************  Debug Printing ******************** */
+func (kord Chord) String() string {
+	retString := fmt.Sprintf("\n---------------------- Node %v ----------------------\nID: %v\nIP: %s\n",
+		kord.ID, kord.ID, kord.IP)
+	retString += fmt.Sprintf("Successor: %v\n", kord.successor)
+	retString += fmt.Sprintf("Predecessor: %v\n", kord.predecessor)
+	// Finger table TODO
+	//fmt.Printf("Finger_table: %v\n", c.Finger_table)
+
+	retString += fmt.Sprintf("\n")
+	return retString
+}
