@@ -31,7 +31,7 @@ func main() {
 	flag.IntVar(&chordPort, "chord", 3001,
 		"Port on which server should listen to Raft requests")
 	flag.BoolVar(&debug, "debug", false,
-		"Debug with two local Nodes joined in a ring of size 2.")
+		"Allows for debug printing mechanisms")
 	flag.StringVar(&joinIp, "peer", "",
 		"Join on the ring through a peer's IP address")
 	flag.Parse()
