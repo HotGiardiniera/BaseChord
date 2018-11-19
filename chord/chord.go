@@ -288,10 +288,10 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 			pingSuccessorResponseChan:   make(chan PingSuccessorResponse),
 			findSuccessorResponseChan:   make(chan FindSuccessorResponse),
 			fixFingersResponseChan:      make(chan FindSuccessorResponse),
-			pingTimer:                   time.NewTimer(10000000 * time.Millisecond),
-			stabilizeTimer:              time.NewTimer(10000000 * time.Millisecond)}
+			pingTimer:                   time.NewTimer(5000 * time.Millisecond),
+			stabilizeTimer:              time.NewTimer(5000 * time.Millisecond)}
 
-		if myID == "127.0.0.1:3001" {
+		if port == 3001 {
 			chord.JoinChan <- true // Leave ourselves a message to join network
 		}
 	}
