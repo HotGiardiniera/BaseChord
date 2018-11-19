@@ -309,7 +309,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 			go chord.JoinInternal(peerIP)
 
 		// We received client request
-		case op <- fs.C:
+		case op := <-fs.C:
 			log.Printf("Received command from client to %v data key %v", op.command.Operation, op.command.Arg)
 			// If we are not connected to the ring yet, defer this command until later
 			if chord.successor == myID || chord.predecessor == myID {
