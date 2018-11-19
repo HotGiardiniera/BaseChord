@@ -323,6 +323,17 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 			peerIP := fmt.Sprintf("127.0.0.1:%d", port+2)
 			go chord.JoinInternal(peerIP)
 
+		// We received client request
+		case op <- fs.C:
+			log.Printf("Received command from client to %v data key %v", op.command.Operation, op.command.Arg)
+			// If we are not connected to the ring yet, defer this command until later
+			if chord.successor == myID || chord.predecessor == myID {
+				log.Printf("Not connected to ring yet. Deferring command to later")
+				fs.C <- op
+			} else {
+				fs.HandleCommand(op)
+			}
+
 		// Find successor has returned result
 		case fsRes := <-chord.findSuccessorResponseChan:
 			if fsRes.err != nil && fsRes.forJoin {
