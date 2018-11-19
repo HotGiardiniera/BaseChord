@@ -25,8 +25,8 @@ type PingSuccessorResponse struct {
 	err error
 }
 
-// FindSucessorResponse -> response object to give a find successor response channel
-type FindSucessorResponse struct {
+// FindSuccessorResponse -> response object to give a find successor response channel
+type FindSuccessorResponse struct {
 	ret     *pb.FindSuccessorRet
 	err     error
 	forJoin bool
@@ -56,7 +56,8 @@ type Chord struct {
 	// Response channels
 	pingPredecessorResponseChan chan PingPredecessorResponse
 	pingSuccessorResponseChan   chan PingSuccessorResponse
-	findSuccessorResponseChan   chan FindSucessorResponse
+	findSuccessorResponseChan   chan FindSuccessorResponse
+	fixFingersResponseChan      chan FindSuccessorResponse
 	// Timers
 	pingTimer      *time.Timer
 	stabilizeTimer *time.Timer
@@ -165,12 +166,12 @@ func (kord *Chord) JoinInternal(peerIP string) {
 	conn, err := connectToNode(peerIP)
 	if err != nil {
 		log.Printf("Could not connect to peer: %v", err)
-		kord.findSuccessorResponseChan <- FindSucessorResponse{err: err, forJoin: true}
+		kord.findSuccessorResponseChan <- FindSuccessorResponse{err: err, forJoin: true}
 	} else {
 		joinReq := &pb.FindSuccessorArgs{Id: kord.ID}
 		log.Printf("Making RPC to %v", peerIP)
 		ret, fsErr := conn.FindSuccessorRPC(context.Background(), joinReq)
-		kord.findSuccessorResponseChan <- FindSucessorResponse{ret: ret, err: fsErr, forJoin: true}
+		kord.findSuccessorResponseChan <- FindSuccessorResponse{ret: ret, err: fsErr, forJoin: true}
 	}
 }
 
@@ -186,9 +187,9 @@ func (kord *Chord) ClosestPrecedingInternal(id uint64) uint64 {
 
 // StabilizeInternal is called periodically; Verifies our successor and tells successor
 //about us
-func (kord *Chord) StabilizeInternal() {
+func (kord *Chord) StabilizeInternal(successor pb.ChordClient) {
 	pingReq := &pb.PingSuccessorArgs{}
-	ret, err := kord.ringMap[kord.successor].conn.PingSuccessorRPC(context.Background(), pingReq)
+	ret, err := successor.PingSuccessorRPC(context.Background(), pingReq)
 	kord.pingSuccessorResponseChan <- PingSuccessorResponse{ret: ret, err: err}
 }
 
@@ -197,7 +198,7 @@ func (kord *Chord) FixFingersInternal() {
 	kord.next = (kord.next + 1) % M
 	nextEntry := kord.ID + (2 ^ kord.next)
 	ret := kord.FindSuccessorInternal(nextEntry)
-	kord.findSuccessorResponseChan <- FindSucessorResponse{ret: ret, err: nil, forJoin: false}
+	go func() { kord.fixFingersResponseChan <- FindSuccessorResponse{ret: ret, err: nil, forJoin: false} }()
 }
 
 // FindSuccessorInternal implements find successor at our node
@@ -217,6 +218,12 @@ func (kord *Chord) NotifyInternal(id uint64, ip string) *pb.NotifyRet {
 		return &pb.NotifyRet{Updated: true}
 	}
 	return &pb.NotifyRet{Updated: false}
+}
+
+// PingPredecessorInternal makes RPC call at our node
+func (kord *Chord) PingPredecessorInternal(predecessor pb.ChordClient) {
+	ret, err := predecessor.PingPredecessorRPC(context.Background(), &pb.PingPredecessorArgs{})
+	kord.pingPredecessorResponseChan <- PingPredecessorResponse{ret: ret, err: err}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -256,7 +263,8 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 			PingFromPredecessorChan:     make(chan PingSuccessorRequest),
 			pingPredecessorResponseChan: make(chan PingPredecessorResponse),
 			pingSuccessorResponseChan:   make(chan PingSuccessorResponse),
-			findSuccessorResponseChan:   make(chan FindSucessorResponse),
+			findSuccessorResponseChan:   make(chan FindSuccessorResponse),
+			fixFingersResponseChan:      make(chan FindSuccessorResponse),
 			pingTimer:                   time.NewTimer(PingTimeout * time.Millisecond),
 			stabilizeTimer:              time.NewTimer(StabilizeTimeout * time.Millisecond)}
 	} else {
@@ -278,10 +286,14 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 			PingFromPredecessorChan:     make(chan PingSuccessorRequest),
 			pingPredecessorResponseChan: make(chan PingPredecessorResponse),
 			pingSuccessorResponseChan:   make(chan PingSuccessorResponse),
-			findSuccessorResponseChan:   make(chan FindSucessorResponse),
+			findSuccessorResponseChan:   make(chan FindSuccessorResponse),
+			fixFingersResponseChan:      make(chan FindSuccessorResponse),
 			pingTimer:                   time.NewTimer(10000000 * time.Millisecond),
 			stabilizeTimer:              time.NewTimer(10000000 * time.Millisecond)}
-		chord.JoinChan <- true // Leave ourselves a message to join network
+
+		if myID == "127.0.0.1:3001" {
+			chord.JoinChan <- true // Leave ourselves a message to join network
+		}
 	}
 
 	go RunChordServer(&chord, port)
@@ -297,11 +309,8 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 
 		// Find successor has returned result
 		case fsRes := <-chord.findSuccessorResponseChan:
-			if fsRes.err != nil {
-				restartTimer(chord.pingTimer, 1000000)
-				restartTimer(chord.stabilizeTimer, 1000000)
-				// peerIP := fmt.Sprintf("127.0.0.1:%d", port-2)
-				// go chord.JoinInternal(peerIP)
+			if fsRes.err != nil && fsRes.forJoin {
+				log.Fatalf("Could not join network. Err: %v", fsRes.err)
 			} else {
 				log.Printf("Our successor: %v:%v", fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp)
 				chord.successor = fsRes.ret.SuccessorId
@@ -313,6 +322,11 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 				restartTimer(chord.pingTimer, PingTimeout)
 				restartTimer(chord.stabilizeTimer, StabilizeTimeout)
 			}
+
+		// We received fix fingers response back from ourselves
+		case ff := <-chord.fixFingersResponseChan:
+			chord.finger[chord.next] = ff.ret.SuccessorId
+			addToRing(ff.ret.SuccessorId, ff.ret.SuccessorIp, chord.ringMap)
 
 		// We received find successor request
 		case fsReq := <-chord.FindSuccessorChan:
@@ -336,7 +350,6 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 
 		// We received a response from pinging our precedessor
 		case pr := <-chord.pingPredecessorResponseChan:
-			log.Printf("HERERERE!!!")
 			if pr.err != nil {
 				log.Printf("Ping failed")
 			} else {
@@ -355,14 +368,15 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 					addToRing(pr.ret.PredecessorId, pr.ret.PredecessorIp, chord.ringMap)
 				}
 				notifyReq := &pb.NotifyArgs{PredecessorId: myID, PredecessorIp: myIP}
-				chord.ringMap[chord.successor].conn.NotifyRPC(context.Background(), notifyReq)
+				go chord.ringMap[chord.successor].conn.NotifyRPC(context.Background(), notifyReq)
 				//TODO: Do we need notify response chan?
 			}
 
 		// Stabilize timer went off
 		case <-chord.stabilizeTimer.C:
 			log.Printf("Running stabilize & fix fingers protocols...")
-			chord.StabilizeInternal()
+			succ := chord.ringMap[chord.successor].conn
+			go chord.StabilizeInternal(succ)
 			chord.FixFingersInternal()
 			restartTimer(chord.stabilizeTimer, StabilizeTimeout)
 
@@ -370,12 +384,10 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
 		case <-chord.pingTimer.C:
 			if chord.successor != uint64MAX {
 				log.Printf("Attempting to ping %v", chord.ringMap[chord.predecessor].IP)
-				ret, err := chord.ringMap[chord.predecessor].conn.PingPredecessorRPC(context.Background(), &pb.PingPredecessorArgs{})
-				go func() {
-					chord.pingPredecessorResponseChan <- PingPredecessorResponse{ret: ret, err: err}
-				}()
+				pred := chord.ringMap[chord.predecessor].conn
+				go chord.PingPredecessorInternal(pred)
 			} else {
-				log.Print("No successor")
+				log.Printf("No successor")
 			}
 			restartTimer(chord.pingTimer, PingTimeout)
 		}
