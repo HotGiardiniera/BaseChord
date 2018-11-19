@@ -3,15 +3,21 @@ package main
 import (
 	"crypto/sha1"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"time"
 )
 
 /* ************** Constants ************** */
+// unint64MAX -> largest unsigned 64-bit int
 const uint64MAX = ^uint64(0)
-const PingTimeout = 1000      // PingTimeout -> milliseconds to ping a predecessor
-const StabilizeTimeout = 3000 // StabilizeTimeout -> milliseconds to run stabilize
+
+// PingTimeout -> milliseconds to ping a predecessor
+const PingTimeout = 1000
+
+// StabilizeTimeout -> milliseconds to run stabilize
+const StabilizeTimeout = 3000
 
 // GenerateRandomIP generates a random 32 bit IP seeded on system time
 // Typically usage will be for local testing
@@ -43,29 +49,32 @@ func truncateBits(m int, base64Rep uint64) uint64 {
 // Between function that takes care of wrapping past 0.
 // This will not succeed in cases where the key we are looking for is the successor
 // To handle that case (i.e in find successors) we can just first check if the key == successor
-func between(key, Id, successorId uint64) bool {
+func between(key, ID, successorID uint64) bool {
 	// If a high node's successor wraps the ring past 0
-	if Id >= successorId { // We are wrapping
-		return (key > Id || key < successorId)
+	if ID >= successorID { // We are wrapping
+		return key > ID || key < successorID || key == successorID
 	}
-	return key > Id && key < successorId
+	return (key > ID && key < successorID) || key == successorID
 }
 
-func generateIdFromIP(ip string) uint64 {
+func generateIDFromIP(IP string) uint64 {
 	shaHash := sha1.New()
-	shaHash.Write([]byte(ip))
+	shaHash.Write([]byte(IP))
 	hashed := shaHash.Sum(nil)
 	hashed64 := bytesToInt64(hashed[:8])
-	Id := truncateBits(M, hashed64) % uint64(math.Pow(2, float64(M)))
-	return Id
+	ID := truncateBits(M, hashed64) % uint64(math.Pow(2, float64(M)))
+	return ID
 }
 
-func addToRing(id uint64, ip string, ringMap *map[uint64]*RingNode) {
-	_, ok := *ringMap[id]
+func addToRing(id uint64, ip string, ringMap map[uint64]*RingNode) {
+	_, ok := ringMap[id]
 	if !ok {
 		conn, err := connectToNode(ip)
-		newRingNode = &RingNode{Ip: ip, conn: conn}
-		*ringMap[uint64] = newRingNode
+		if err != nil {
+			log.Fatalf("Failed to connect to GRPC server %v", err)
+		}
+		newRingNode := &RingNode{IP: ip, conn: conn}
+		ringMap[id] = newRingNode
 	}
 }
 

@@ -14,13 +14,13 @@ type InputChannelType struct {
 	response chan pb.Result
 }
 
-// KVStore is struct for key value stores.
+// FileSystem is struct for key value stores.
 type FileSystem struct {
 	C          chan InputChannelType
 	fileSystem map[string]string
 }
 
-// Retreive file by name
+// Get file by name
 func (fs *FileSystem) Get(ctx context.Context, file *pb.FileGet) (*pb.Result, error) {
 	// Create a channel
 	c := make(chan pb.Result)
@@ -75,7 +75,7 @@ func (fs *FileSystem) StoreInternal(f string, d *pb.Data) pb.Result {
 	return pb.Result{Result: &pb.Result_Success{}}
 }
 
-// DelteInternal : Used internally, this function clears a kv store. Assumes no
+// DeleteInternal : Used internally, this function clears a kv store. Assumes no
 //racing calls.
 func (fs *FileSystem) DeleteInternal(f string) pb.Result {
 	_, ok := fs.fileSystem[f]

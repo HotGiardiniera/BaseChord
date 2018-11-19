@@ -1,58 +1,72 @@
 package main
 
 import (
-	"github.com/nyu-distributed-systems-fa18/BaseChord/pb"
+	"fmt"
 	context "golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"log"
+	"net"
 	"time"
 
-	"fmt"
-	"net"
+	"github.com/nyu-distributed-systems-fa18/BaseChord/pb"
 )
 
 /* ************** Chord structs ************** */
-//PingResponse -> response object to give a ping response channel
-type PingResponse struct {
-	ret         *pb.PingPredecessorRet
-	err         error
-	predecessor string
+
+// PingPredecessorResponse is response object to give a ping response channel
+type PingPredecessorResponse struct {
+	ret *pb.PingPredecessorRet
+	err error
 }
 
-//FindSucessorResponse -> response object to give a find successor response channel
-type FindSucessorResponse struct {
-	ret *pb.FindSuccessorRet
+// PingSuccessorResponse is response object to give a ping response channel
+type PingSuccessorResponse struct {
+	ret *pb.PingSuccessorRet
 	err error
+}
+
+// FindSucessorResponse -> response object to give a find successor response channel
+type FindSucessorResponse struct {
+	ret     *pb.FindSuccessorRet
+	err     error
+	forJoin bool
 }
 
 // RingNode -> represents a ring node that our node connects to
 type RingNode struct {
-	Ip   string
+	IP   string
 	conn pb.ChordClient // Conenction to a ring node
 }
 
 // Chord -> object that represets our Node on the ring abstractly
 type Chord struct {
-	Id          uint64
-	Ip          string
+	ID          uint64
+	IP          string
 	successor   uint64
 	predecessor uint64
-	finger      [M]unint64
 	ringMap     map[uint64]*RingNode
+	finger      [M]uint64
+	next        uint64
 	// Request channels
-	JoinChan          chan bool
-	FindSuccessorChan chan FindSuccessorRequest
-	NotifyChan        chan NotifyRequest
-	PingChan          chan PingRequest
+	JoinChan                chan bool
+	FindSuccessorChan       chan FindSuccessorRequest
+	NotifyChan              chan NotifyRequest
+	PingFromSuccessorChan   chan PingPredecessorRequest
+	PingFromPredecessorChan chan PingSuccessorRequest
 	// Response channels
-	pingResponseChan          chan PingResponse
-	findSuccessorResponseChan chan FindSucessorResponse
+	pingPredecessorResponseChan chan PingPredecessorResponse
+	pingSuccessorResponseChan   chan PingSuccessorResponse
+	findSuccessorResponseChan   chan FindSucessorResponse
+	// Timers
+	pingTimer      *time.Timer
+	stabilizeTimer *time.Timer
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 /* ************** Chord RPCs ************** */
-// Launch a GRPC service for us as a Chord peer
+
+// RunChordServer Launch a GRPC service for us as a Chord peer
 func RunChordServer(kord *Chord, port int) {
 	// Convert port to a string form
 	portString := fmt.Sprintf(":%d", port)
@@ -86,178 +100,243 @@ func connectToNode(node string) (pb.ChordClient, error) {
 	return pb.NewChordClient(conn), nil
 }
 
-// FindSuccessorRequest: Argument for find successor method
+// FindSuccessorRequest is argument for find successor method
 type FindSuccessorRequest struct {
 	arg      *pb.FindSuccessorArgs
 	response chan pb.FindSuccessorRet
 }
 
-// FindSuccessor in chord ring
-func (kord *Chord) FindSuccessor(ctx context.Context, arg *pb.FindSuccessorArgs) (*pb.FindSuccessorRet, error) {
+// FindSuccessorRPC in chord ring
+func (kord *Chord) FindSuccessorRPC(ctx context.Context, arg *pb.FindSuccessorArgs) (*pb.FindSuccessorRet, error) {
 	c := make(chan pb.FindSuccessorRet)
 	kord.FindSuccessorChan <- FindSuccessorRequest{arg: arg, response: c}
 	result := <-c
 	return &result, nil
 }
 
-// NotifyRequesst: Argument for notify method
+// NotifyRequest is argument for notify method
 type NotifyRequest struct {
 	arg      *pb.NotifyArgs
 	response chan pb.NotifyRet
 }
 
-// Notify: Tell node that we believe we are that node's predecessor
-func (kord *Chord) Notify(ctx context.Context, arg *pb.NotifyArgs) (*pb.NotifyRet, error) {
+// NotifyRPC node that we believe we are that node's predecessor
+func (kord *Chord) NotifyRPC(ctx context.Context, arg *pb.NotifyArgs) (*pb.NotifyRet, error) {
 	c := make(chan pb.NotifyRet)
 	kord.NotifyChan <- NotifyRequest{arg: arg, response: c}
 	result := <-c
 	return &result, nil
 }
 
-// PingRequest: Arguement for ping method
-type PingRequest struct {
+// PingPredecessorRequest is arguement for ping predecessor method
+type PingPredecessorRequest struct {
 	arg      *pb.PingPredecessorArgs
 	response chan pb.PingPredecessorRet
 }
 
-// PingPredecessor: Ensure that predecessor is still working
-func (kord *Chord) PingPredecessor(ctx context.Context, arg *pb.PingPredecessorArgs) (*pb.PingPredecessorRet, error) {
+// PingPredecessorRPC ensures that predecessor is still working
+func (kord *Chord) PingPredecessorRPC(ctx context.Context, arg *pb.PingPredecessorArgs) (*pb.PingPredecessorRet, error) {
 	c := make(chan pb.PingPredecessorRet)
-	kord.PingChan <- PingRequest{arg: arg, response: c}
+	kord.PingFromSuccessorChan <- PingPredecessorRequest{arg: arg, response: c}
+	result := <-c
+	return &result, nil
+}
+
+// PingSuccessorRequest is arguement for ping succesor method
+type PingSuccessorRequest struct {
+	arg      *pb.PingSuccessorArgs
+	response chan pb.PingSuccessorRet
+}
+
+// PingSuccessorRPC asks successor who its predecessor is
+func (kord *Chord) PingSuccessorRPC(ctx context.Context, arg *pb.PingSuccessorArgs) (*pb.PingSuccessorRet, error) {
+	c := make(chan pb.PingSuccessorRet)
+	kord.PingFromPredecessorChan <- PingSuccessorRequest{arg: arg, response: c}
 	result := <-c
 	return &result, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/* *********** Other chord methods *********** */
+/* *********** Internal chord methods *********** */
 
-// Join: Ask different node to find our successor so we can join the network
-func (kord *Chord) Join(peerIp string) {
+// JoinInternal asks different node to find our successor so we can join the network
+func (kord *Chord) JoinInternal(peerIP string) {
 	// Connect to other ring node
-	peer, err := connectToNode(peerIP)
+	conn, err := connectToNode(peerIP)
 	if err != nil {
-		kord.findSuccessorResponseChan <- FindSucessorResponse{err: err}
+		log.Printf("Could not connect to peer: %v", err)
+		kord.findSuccessorResponseChan <- FindSucessorResponse{err: err, forJoin: true}
+	} else {
+		joinReq := &pb.FindSuccessorArgs{Id: kord.ID}
+		log.Printf("Making RPC to %v", peerIP)
+		ret, fsErr := conn.FindSuccessorRPC(context.Background(), joinReq)
+		kord.findSuccessorResponseChan <- FindSucessorResponse{ret: ret, err: fsErr, forJoin: true}
 	}
-	joinReq := &pb.FindSuccessorArgs{Id: kord.Id}
-	ret, fsErr := peer.FindSuccessor(context.Background(), joinReq)
-	kord.findSuccessorResponseChan <- FindSucessorResponse{ret: ret, err: fsErr}
 }
 
-// ClosestPreceding: Find node closest (and before) provided id
-func (kord *Chord) ClosestPreceding(id unint64) unint64 {
+// ClosestPrecedingInternal finds node closest (and before) provided id
+func (kord *Chord) ClosestPrecedingInternal(id uint64) uint64 {
 	for i := M - 1; i > 0; i-- {
-		if between(kord.finger[i], kord.Id, id) {
+		if between(kord.finger[i], kord.ID, id) {
 			return kord.finger[i]
 		}
 	}
-	return kord.id
+	return kord.ID
 }
 
-// Stabilize: Called periodically; Verifies our successor and tells successor
+// StabilizeInternal is called periodically; Verifies our successor and tells successor
 //about us
-func (kord *Chord) Stabilize() {
+func (kord *Chord) StabilizeInternal() {
+	pingReq := &pb.PingSuccessorArgs{}
+	ret, err := kord.ringMap[kord.successor].conn.PingSuccessorRPC(context.Background(), pingReq)
+	kord.pingSuccessorResponseChan <- PingSuccessorResponse{ret: ret, err: err}
+}
 
+// FixFingersInternal is called periodically (with stabilize); Refreshes finger table
+func (kord *Chord) FixFingersInternal() {
+	kord.next = (kord.next + 1) % M
+	nextEntry := kord.ID + (2 ^ kord.next)
+	ret := kord.FindSuccessorInternal(nextEntry)
+	kord.findSuccessorResponseChan <- FindSucessorResponse{ret: ret, err: nil, forJoin: false}
+}
+
+// FindSuccessorInternal implements find successor at our node
+func (kord *Chord) FindSuccessorInternal(id uint64) *pb.FindSuccessorRet {
+	if between(id, kord.ID, kord.successor) {
+		return &pb.FindSuccessorRet{SuccessorId: kord.successor, SuccessorIp: kord.ringMap[kord.successor].IP}
+	}
+	closest := kord.ClosestPrecedingInternal(id)
+	return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP}
+}
+
+// NotifyInternal implements the notify behavior at our Node
+func (kord *Chord) NotifyInternal(id uint64, ip string) *pb.NotifyRet {
+	if kord.predecessor == uint64MAX || between(id, kord.predecessor, kord.ID) {
+		kord.predecessor = id
+		addToRing(id, ip, kord.ringMap)
+		return &pb.NotifyRet{Updated: true}
+	}
+	return &pb.NotifyRet{Updated: false}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 /* *********** Primary method for called by chord/main.go *********** */
-func runChord(fs *FileSystem, myIp string, myId uint64, port int, debug bool) {
-	log.Printf("Chord ARGS: %v %v %v", myIp, myId, port)
+
+func runChord(fs *FileSystem, myIP string, myID uint64, port int, debug bool) {
+	log.Printf("Chord ARGS: %v %v %v", myIP, myID, port)
 
 	var chord Chord
-	var fTable [M]unint64
+	var fTable [M]uint64
+	rM := map[uint64]*RingNode{myID: &RingNode{IP: myIP}}
 	if debug {
-		id_3001 := generateIdFromIP("127.0.0.1:3001")
-		id_3003 := generateIdFromIP("127.0.0.1:3003")
-		peerId := id_3001
-		peerIp := "127.0.0.1:3001"
-		if myId == id_3001 {
-			peerId = id_3003
-			peerIp = "127.0.0.1:3003"
+		peerID := generateIDFromIP("127.0.0.1:3001")
+		peerIP := "127.0.0.1:3001"
+		if myID == peerID {
+			peerID = generateIDFromIP("127.0.0.1:3003")
+			peerIP = "127.0.0.1:3003"
 		}
 		// Connect to our other ring node
-		conn, err := connectToNode(peerIp)
-		if err != nil {
-			log.Fatalf("Failed to connect to GRPC server %v", err)
-		}
-		otherNode := &RingNode{Ip: peerIp, conn: conn}
-		addToRing(peerId, peerIp, &chord.ringMap)
+		addToRing(peerID, peerIP, rM)
 		for i := 0; i < M; i++ {
-			fTable[i] = peerId
+			fTable[i] = peerID
 		}
 		chord = Chord{
-			Id:                    myId,
-			Ip:                    myIp,
-			successor:             peerId,
-			predecessor:           peerId,
-			finger:                fTable,
-			ringMap:               ringMap,
-			PingChan:              make(chan PingRequest),
-			pingResponseChan:      make(chan PingResponse),
-			successorResponseChan: make(chan FindSucessorResponse)}
+			ID:                          myID,
+			IP:                          myIP,
+			successor:                   peerID,
+			predecessor:                 peerID,
+			ringMap:                     rM,
+			finger:                      fTable,
+			next:                        0,
+			JoinChan:                    make(chan bool),
+			FindSuccessorChan:           make(chan FindSuccessorRequest),
+			NotifyChan:                  make(chan NotifyRequest),
+			PingFromSuccessorChan:       make(chan PingPredecessorRequest),
+			PingFromPredecessorChan:     make(chan PingSuccessorRequest),
+			pingPredecessorResponseChan: make(chan PingPredecessorResponse),
+			pingSuccessorResponseChan:   make(chan PingSuccessorResponse),
+			findSuccessorResponseChan:   make(chan FindSucessorResponse),
+			pingTimer:                   time.NewTimer(PingTimeout * time.Millisecond),
+			stabilizeTimer:              time.NewTimer(StabilizeTimeout * time.Millisecond)}
 	} else {
 		for i := 0; i < M; i++ {
-			fTable[i] = myId
+			fTable[i] = myID
 		}
 		chord = Chord{
-			Id:                    myId,
-			Ip:                    myIp,
-			successor:             myId,
-			predecessor:					 myId,
-			finger:                fTable,
-			ringMap:               map[uint64]*RingNode{},
-			PingChan:              make(chan PingRequest),
-			JoinChan:              make(chan bool, 1),
-			pingResponseChan:      make(chan PingResponse),
-			successorResponseChan: make(chan FindSucessorResponse)}
-		// Leave ourselves a message to try to join a network
-		chord.JoinChan <- true
+			ID:                          myID,
+			IP:                          myIP,
+			successor:                   myID,
+			predecessor:                 myID,
+			ringMap:                     rM,
+			finger:                      fTable,
+			next:                        0,
+			JoinChan:                    make(chan bool, 1),
+			FindSuccessorChan:           make(chan FindSuccessorRequest),
+			NotifyChan:                  make(chan NotifyRequest),
+			PingFromSuccessorChan:       make(chan PingPredecessorRequest),
+			PingFromPredecessorChan:     make(chan PingSuccessorRequest),
+			pingPredecessorResponseChan: make(chan PingPredecessorResponse),
+			pingSuccessorResponseChan:   make(chan PingSuccessorResponse),
+			findSuccessorResponseChan:   make(chan FindSucessorResponse),
+			pingTimer:                   time.NewTimer(10000000 * time.Millisecond),
+			stabilizeTimer:              time.NewTimer(10000000 * time.Millisecond)}
+		chord.JoinChan <- true // Leave ourselves a message to join network
 	}
 
 	go RunChordServer(&chord, port)
-	pingTimer := time.NewTimer(PingTimeout * time.Millisecond)
 
 	/* *********** Forever loop to run our chord functionality *********** */
 	for {
 		select {
 		// We left ourselves a message to join the network
-		case jn := <-chord.JoinChan:
+		case <-chord.JoinChan:
 			log.Printf("Attempting to join network...")
-			peerIp := fmt.Sprintf("127.0.0.1:%d", port+2)
-			chord.Join(peerIp)
+			peerIP := fmt.Sprintf("127.0.0.1:%d", port+2)
+			go chord.JoinInternal(peerIP)
 
 		// Find successor has returned result
-		case fr := <-chord.findSuccessorResponseChan:
-			if fs.err != nil {
-				peerIp := fmt.Sprintf("127.0.0.1:%d", port-2)
-				chord.Join(peerIp)
+		case fsRes := <-chord.findSuccessorResponseChan:
+			if fsRes.err != nil {
+				restartTimer(chord.pingTimer, 1000000)
+				restartTimer(chord.stabilizeTimer, 1000000)
+				// peerIP := fmt.Sprintf("127.0.0.1:%d", port-2)
+				// go chord.JoinInternal(peerIP)
 			} else {
-				chord.successor = fs.ret.Successor
-				chord.finger[0] = chord.succesor
+				log.Printf("Our successor: %v:%v", fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp)
+				chord.successor = fsRes.ret.SuccessorId
+				chord.finger[0] = chord.successor
+				addToRing(fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp, chord.ringMap)
+				if fsRes.forJoin {
+					chord.predecessor = fsRes.ret.SuccessorId
+				}
+				restartTimer(chord.pingTimer, PingTimeout)
+				restartTimer(chord.stabilizeTimer, StabilizeTimeout)
 			}
 
 		// We received find successor request
-		case fr := <-chord.FindSuccessorChan:
-			if between(fs.arg.Id, chord.Id, chord.successor) {
-				fs.response <- pb.FindSuccessorRet{SuccessorId: chord.successor, SuccessorIp: ringMap[successor].Ip}
-			} else {
-				closest = chord.ClosestPreceding(fs.arg.Id)
-				fs.response <- pb.FindSuccessorId{SuccessorId: closest.Id, SuccessorIp: closest.Ip}
-			}
+		case fsReq := <-chord.FindSuccessorChan:
+			log.Printf("Finding successor for %v", fsReq.arg.Id)
+			fsReq.response <- *(chord.FindSuccessorInternal(fsReq.arg.Id))
 
-		// We received notify request from node that believes it's our predecessor
+		// We received notification from node that believes it's our predecessor
 		case nr := <-chord.NotifyChan:
-			if chord.predecessor == nil
-			|| between(nr.arg.PredecessorId, chord.predecessor, chord.Id) {
-				chord.predecessor = nr.arg.PredecessorId
-				addToRing(nr.arg.PredecessorId, nr.arg.PredecessorIp, &chord.ringMap)
-				nr.response <- pb.NotifyRet{Updated: true}
-			} else {
-				nr.response <- pb.NotifyRet{Updated: false}
-			}
+			nr.response <- *(chord.NotifyInternal(nr.arg.PredecessorId, nr.arg.PredecessorIp))
 
-		case pr := <-chord.pingResponseChan:
+		// We received ping from our successor to make sure we're still online
+		case ping := <-chord.PingFromSuccessorChan:
+			log.Print("Ping from successor")
+			ping.response <- pb.PingPredecessorRet{}
+
+		// We received ping from a node behind us asking us for our predecessor's id
+		case ping := <-chord.PingFromPredecessorChan:
+			log.Print("Ping from predecessor")
+			ping.response <- pb.PingSuccessorRet{PredecessorId: chord.predecessor,
+				PredecessorIp: chord.ringMap[chord.predecessor].IP}
+
+		// We received a response from pinging our precedessor
+		case pr := <-chord.pingPredecessorResponseChan:
+			log.Printf("HERERERE!!!")
 			if pr.err != nil {
 				log.Printf("Ping failed")
 			} else {
@@ -265,23 +344,40 @@ func runChord(fs *FileSystem, myIp string, myId uint64, port int, debug bool) {
 				log.Printf("Got ping response!")
 			}
 
-		case ping := <-chord.PingChan:
-			log.Print("ping from successor")
-			ping.response <- pb.PingPredecessorRet{}
+		// We received a response from asking our successor who its predecessor is
+		//(This is part of the stabilize protocol)
+		case pr := <-chord.pingSuccessorResponseChan:
+			if pr.err != nil {
+				log.Printf("Failed to ping our successor...")
+			} else {
+				if between(pr.ret.PredecessorId, chord.ID, chord.successor) {
+					chord.successor = pr.ret.PredecessorId
+					addToRing(pr.ret.PredecessorId, pr.ret.PredecessorIp, chord.ringMap)
+				}
+				notifyReq := &pb.NotifyArgs{PredecessorId: myID, PredecessorIp: myIP}
+				chord.ringMap[chord.successor].conn.NotifyRPC(context.Background(), notifyReq)
+				//TODO: Do we need notify response chan?
+			}
 
-		case <-pingTimer.C:
-			// We need to ping our predecessor
-			log.Printf("My ip and Id: %v %v", chord.IPAddress, chord.Id)
-			if chord.successor != nil {
-				log.Printf("Attempting to ping %v", chord.predecessor.IPAddress)
-				go func(pred pb.ChordClient, predIP string) {
-					ret, err := pred.PingPredecessor(context.Background(), &pb.PingPredecessorArgs{})
-					pingResponseChan <- PingResponse{ret: ret, err: err, predecessor: predIP}
-				}(chord.predecessor.conn, chord.predecessor.IPAddress)
+		// Stabilize timer went off
+		case <-chord.stabilizeTimer.C:
+			log.Printf("Running stabilize & fix fingers protocols...")
+			chord.StabilizeInternal()
+			chord.FixFingersInternal()
+			restartTimer(chord.stabilizeTimer, StabilizeTimeout)
+
+		// Ping predecessor timer went off
+		case <-chord.pingTimer.C:
+			if chord.successor != uint64MAX {
+				log.Printf("Attempting to ping %v", chord.ringMap[chord.predecessor].IP)
+				ret, err := chord.ringMap[chord.predecessor].conn.PingPredecessorRPC(context.Background(), &pb.PingPredecessorArgs{})
+				go func() {
+					chord.pingPredecessorResponseChan <- PingPredecessorResponse{ret: ret, err: err}
+				}()
 			} else {
 				log.Print("No successor")
 			}
-			restartTimer(pingTimer, PingTimeout)
+			restartTimer(chord.pingTimer, PingTimeout)
 		}
 	}
 }

@@ -72,7 +72,7 @@ message Command {
 
 // Input to FindSuccessor
 message FindSuccessorArgs {
-    int64 id = 1;
+    uint64 id = 1;
 }
 
 // Output from FindSuccessor
@@ -108,12 +108,13 @@ message PingSuccessorArgs {
 // Output from PingSuccessor (successor's predecessor)
 message PingSuccessorRet {
     uint64 predecessorId = 1;
+    string predecessorIp = 2;
 }
 
 // Chord service
 service Chord {
-    rpc FindSuccessor(FindSuccessorArgs) returns (FindSuccessorRet) {}
-    rpc Notify(NotifyArgs) returns (NotifyRet) {}
-    rpc PingPredecessor(PingPredecessorArgs) returns (PingPredecessorRet) {}
-    rpc PingSuhccessor(PingSuccessorArgs) returns (PingSuccessorRet) {}
+    rpc FindSuccessorRPC(FindSuccessorArgs) returns (FindSuccessorRet) {}
+    rpc NotifyRPC(NotifyArgs) returns (NotifyRet) {}
+    rpc PingPredecessorRPC(PingPredecessorArgs) returns (PingPredecessorRet) {}
+    rpc PingSuccessorRPC(PingSuccessorArgs) returns (PingSuccessorRet) {}
 }
