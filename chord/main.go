@@ -17,23 +17,23 @@ const M = 7
 
 func main() {
 	// Argument parsing
-	var seed int64
 	var clientPort int
 	var chordPort int
+	var joinIp string // Start a chord node and join to it immediately
 
 	// Debug mode: this will force a node to assume it is joined in a ring of size 2
 	// This is mainly just to test RPCs. It will assume Node 1 is port 3001 and node 2 is 3003.
 	// in debug mode these two will only be joined together and (TODO) ignore any other joins
 	var debug bool
 
-	flag.Int64Var(&seed, "seed", -1,
-		"Seed for random number generator, values less than 0 result in use of time")
 	flag.IntVar(&clientPort, "port", 3000,
 		"Port on which server should listen to client requests")
 	flag.IntVar(&chordPort, "chord", 3001,
 		"Port on which server should listen to Raft requests")
 	flag.BoolVar(&debug, "debug", false,
-		"Debug with two local Nodes joined in a ring of size 2.")
+		"Allows for debug printing mechanisms")
+	flag.StringVar(&joinIp, "peer", "",
+		"Join on the ring through a peer's IP address")
 	flag.Parse()
 
 	// Get hostname
