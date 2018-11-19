@@ -308,11 +308,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 			go chord.JoinInternal(jp)
 
 		// We received client request
-<<<<<<< Updated upstream
 		case op := <-fs.C:
-=======
-		case op := <- fs.C:
->>>>>>> Stashed changes
 			log.Printf("Received command from client to %v data key %v", op.command.Operation, op.command.Arg)
 			// If we are not connected to the ring yet, defer this command until later
 			if chord.successor == myID || chord.predecessor == myID {
