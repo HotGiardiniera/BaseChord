@@ -32,8 +32,8 @@ func main() {
 		"Port on which server should listen to Chord requests")
 	flag.BoolVar(&debug, "debug", false,
 		"Allows for debug printing mechanisms")
-	flag.StringVar(&joinIp, "peer", "",
-		"Join on the ring through a peer's IP address")
+	flag.StringVar(&joinIp, "join", "",
+		"Join on the ring through a peer's IP address. Ex -join 127.0.0.1:3001")
 	flag.Parse()
 
 	// Get hostname
