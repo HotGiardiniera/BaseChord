@@ -51,6 +51,7 @@ def boot(args):
     v1 = init_kube()
     with open(os.path.join(sys.path[0], 'ring-node-template.yml')) as f:
         specs = list(yaml.load_all(f))
+        peer0_node = "chord0:3001"
         for i in range(args.nodes):
             name = "chord%s"%i
             spec_copy = copy.deepcopy(specs)
@@ -61,6 +62,8 @@ def boot(args):
             pod_spec['spec']['containers'][0]['ports'][1]['name']="%s-raft"%name
             # TODO autojoin peers
             args = ['chord']
+            if i > 0:
+                args += ['-join', peer0_node]
             pod_spec['spec']['containers'][0]['command'] = args
 
             service_spec =  spec_copy[1]
