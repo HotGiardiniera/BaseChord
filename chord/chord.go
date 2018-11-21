@@ -265,7 +265,9 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		go func(reeder *bufio.Reader) {
 			for {
 				text, _ := reeder.ReadString('\n')
-				debugPrintChan <- text
+                if text == "d\n"{
+                    debugPrintChan <- text
+                }
 			}
 		}(reader)
 	}
