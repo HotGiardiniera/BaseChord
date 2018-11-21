@@ -59,7 +59,7 @@ def boot(args):
             pod_spec['metadata']['name'] = name
             pod_spec['metadata']['labels']['app'] = name
             pod_spec['spec']['containers'][0]['ports'][0]['name']="%s-client"%name
-            pod_spec['spec']['containers'][0]['ports'][1]['name']="%s-raft"%name
+            pod_spec['spec']['containers'][0]['ports'][1]['name']="%s-chord"%name
             # TODO autojoin peers
             args = ['chord']
             if i > 0:
@@ -70,8 +70,8 @@ def boot(args):
             # Create a service spec for this service
             service_spec['metadata']['name'] = name
             service_spec['spec']['selector']['app'] = name
-            service_spec['spec']['ports'][0]['targetPort'] = "chord0-client"
-            service_spec['spec']['ports'][1]['targetPort'] = "chord0-chord"
+            service_spec['spec']['ports'][0]['targetPort'] = "%s-client"%name
+            service_spec['spec']['ports'][1]['targetPort'] = "%s-chord"%name
             try:
                 response = v1.create_namespaced_pod('default', pod_spec)
                 response = v1.create_namespaced_service('default', service_spec)
