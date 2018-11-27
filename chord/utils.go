@@ -104,23 +104,23 @@ func green(s string) string {
 }
 
 func red(s string) string {
-	return fmt.Sprintf("u001b[31m%s\u001b[0m", s)
+	return fmt.Sprintf("\u001b[31m%s\u001b[0m", s)
 }
 
 func yellow(s string) string {
-	return fmt.Sprintf("u001b[33m%s\u001b[0m", s)
+	return fmt.Sprintf("\u001b[33m%s\u001b[0m", s)
 }
 
 func blue(s string) string {
-	return fmt.Sprintf("u001b[34m%s\u001b[0m", s)
+	return fmt.Sprintf("\u001b[34m%s\u001b[0m", s)
 }
 
 func magenta(s string) string {
-	return fmt.Sprintf("u001b[35m%s\u001b[0m", s)
+	return fmt.Sprintf("\u001b[35m%s\u001b[0m", s)
 }
 
 func cyan(s string) string {
-	return fmt.Sprintf("u001b[36m%s\u001b[0m", s)
+	return fmt.Sprintf("\u001b[36m%s\u001b[0m", s)
 }
 
 /* ********************  Debug Printing ******************** */

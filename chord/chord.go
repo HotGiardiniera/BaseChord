@@ -265,7 +265,9 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		go func(reeder *bufio.Reader) {
 			for {
 				text, _ := reeder.ReadString('\n')
-				debugPrintChan <- text
+				if text == "d\n" {
+					debugPrintChan <- text
+				}
 			}
 		}(reader)
 	}
@@ -320,9 +322,9 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		// Find successor has returned result
 		case fsRes := <-chord.findSuccessorResponseChan:
 			if fsRes.err != nil && fsRes.forJoin {
-				log.Fatalf("Could not join network. Err: %v", fsRes.err)
+				log.Fatalf(red("Could not join network. Err: %v"), fsRes.err)
 			} else {
-				log.Printf("Our successor: %v:%v", fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp)
+				log.Printf(green("Our successor: %v:%v"), fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp)
 				chord.successor = fsRes.ret.SuccessorId
 				chord.finger[0] = chord.successor
 				addToRing(fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp, chord.ringMap)
@@ -337,7 +339,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 
 		// We received find successor request
 		case fsReq := <-chord.FindSuccessorChan:
-			log.Printf("We received request to find successor for key %v", fsReq.arg.Id)
+			log.Printf(cyan("We received request to find successor for key %v"), fsReq.arg.Id)
 			fsReq.response <- *(chord.FindSuccessorInternal(fsReq.arg.Id))
 
 		// We received notification from node that believes it's our predecessor
