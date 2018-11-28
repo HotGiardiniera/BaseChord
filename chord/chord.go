@@ -265,9 +265,9 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		go func(reeder *bufio.Reader) {
 			for {
 				text, _ := reeder.ReadString('\n')
-                if text == "d\n"{
-                    debugPrintChan <- text
-                }
+				if text == "d\n" {
+					debugPrintChan <- text
+				}
 			}
 		}(reader)
 	}
@@ -392,6 +392,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				succ := chord.ringMap[chord.successor].conn
 				go chord.StabilizeInternal(succ)
 				chord.FixFingersInternal()
+				log.Printf(green("%v"), chord)
 			}
 			restartTimer(chord.stabilizeTimer, StabilizeTimeout)
 

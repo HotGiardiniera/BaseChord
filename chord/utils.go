@@ -14,10 +14,10 @@ import (
 const uint64MAX = ^uint64(0)
 
 // PingTimeout -> milliseconds to ping a predecessor
-const PingTimeout = 1000
+const PingTimeout = 2000
 
 // StabilizeTimeout -> milliseconds to run stabilize
-const StabilizeTimeout = 3000
+const StabilizeTimeout = 5000
 
 // PowTwo raises 2 to the power of x
 func PowTwo(x uint64) uint64 {
@@ -123,6 +123,17 @@ func cyan(s string) string {
 	return fmt.Sprintf("\u001b[36m%s\u001b[0m", s)
 }
 
+/* ********************  Finger Table formatting ******************** */
+func fingertoString(id uint64, ft *[M]uint64) string {
+	retString := "|-----|-----|-----|\n|    i|  mod|  key|\n|-----|-----|-----|\n"
+	twoToTheM := PowTwo(M)
+	for i := 0; i < M; i++ {
+		retString += fmt.Sprintf("|%5v|%5v|%5v|\n|-----|-----|-----|\n",
+			i, (id+PowTwo(uint64(i)))%twoToTheM, ft[i])
+	}
+	return retString
+}
+
 /* ********************  Debug Printing ******************** */
 func (kord Chord) String() string {
 	retString := fmt.Sprintf("\n---------------------- Node %v ----------------------\nID: %v\nIP: %s\n",
@@ -130,8 +141,6 @@ func (kord Chord) String() string {
 	retString += fmt.Sprintf("Successor: %v\n", kord.successor)
 	retString += fmt.Sprintf("Predecessor: %v\n", kord.predecessor)
 	// Finger table TODO
-	//fmt.Printf("Finger_table: %v\n", c.Finger_table)
-
-	retString += fmt.Sprintf("\n")
+	retString += fmt.Sprintf("Finger_table:\n%v", fingertoString(kord.ID, &kord.finger))
 	return retString
 }
