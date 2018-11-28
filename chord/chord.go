@@ -323,6 +323,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		case fsRes := <-chord.findSuccessorResponseChan:
 			if fsRes.err != nil && fsRes.forJoin {
 				log.Printf(red("Could not join network. Err: %v"), fsRes.err)
+				chord.JoinChan <- joinNode // retry connection (by putting value on join chan)
 			} else {
 				log.Printf(green("Our successor: %v:%v"), fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp)
 				chord.successor = fsRes.ret.SuccessorId
