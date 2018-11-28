@@ -47,7 +47,7 @@ def kill_pods(args):
             print("Error in killing %s %s"%(i, e), file=sys.stderr)
 
 def boot(args):
-    # Boot pods
+    # Boot n pods
     v1 = init_kube()
     with open(os.path.join(sys.path[0], 'ring-node-template.yml')) as f:
         specs = list(yaml.load_all(f))
