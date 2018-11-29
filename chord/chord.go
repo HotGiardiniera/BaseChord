@@ -31,6 +31,7 @@ type PingSuccessorResponse struct {
 // FindSuccessorResponse -> response object to give a find successor response channel
 type FindSuccessorResponse struct {
 	ret     *pb.FindSuccessorRet
+	nextId  uint64
 	err     error
 	forJoin bool
 }
@@ -327,7 +328,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 			} else {
 				log.Printf(green("Our successor: %v:%v"), fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp)
 				chord.successor = fsRes.ret.SuccessorId
-				chord.finger[0] = chord.successor
+				chord.finger[0] = chord.successor // needed????
 				addToRing(fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp, chord.ringMap)
 				notifyReq := &pb.NotifyArgs{PredecessorId: myID, PredecessorIp: myIP}
 				go chord.ringMap[chord.successor].conn.NotifyRPC(context.Background(), notifyReq)
@@ -335,7 +336,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 
 		// We received fix fingers response back from ourselves
 		case ff := <-chord.fixFingersResponseChan:
-			chord.finger[chord.next] = ff.ret.SuccessorId
+			chord.finger[ff.nextId] = ff.ret.SuccessorId
 			addToRing(ff.ret.SuccessorId, ff.ret.SuccessorIp, chord.ringMap)
 
 		// We received find successor request
@@ -362,7 +363,8 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		// We received a response from pinging our precedessor
 		case pr := <-chord.pingPredecessorResponseChan:
 			if pr.err != nil {
-				log.Printf("Ping failed!")
+				log.Printf(red("Ping failed!"))
+				chord.predecessor = myID //predecessor failed revert to start state predecessor
 			} else {
 				// We've recived a ping response from just respond
 				log.Printf("Got ping response!")
@@ -377,6 +379,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				if between(pr.ret.PredecessorId, chord.ID, chord.successor, false) {
 					log.Printf("Updating successor: %v:%v", pr.ret.PredecessorId, pr.ret.PredecessorIp)
 					chord.successor = pr.ret.PredecessorId
+                    chord.finger[0] = chord.successor
 					addToRing(pr.ret.PredecessorId, pr.ret.PredecessorIp, chord.ringMap)
 				}
 				notifyReq := &pb.NotifyArgs{PredecessorId: myID, PredecessorIp: myIP}
