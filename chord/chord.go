@@ -31,7 +31,7 @@ type PingSuccessorResponse struct {
 // FindSuccessorResponse -> response object to give a find successor response channel
 type FindSuccessorResponse struct {
 	ret     *pb.FindSuccessorRet
-	nextId  uint64
+	nextID  uint64
 	err     error
 	forJoin bool
 }
@@ -180,7 +180,7 @@ func (kord *Chord) JoinInternal(peerIP string) {
 
 // ClosestPrecedingInternal finds node closest (and before) provided id
 func (kord *Chord) ClosestPrecedingInternal(id uint64) uint64 {
-	for i := M - 1; i > 0; i-- {
+	for i := M - 1; i >= 0; i-- {
 		if between(kord.finger[i], kord.ID, id, false) {
 			return kord.finger[i]
 		}
@@ -202,8 +202,10 @@ func (kord *Chord) FixFingersInternal() {
 	kord.next = (kord.next + 1) % M
 	nextEntry := (kord.ID + PowTwo(kord.next)) % PowTwo(M)
 	log.Printf("Looking for successor of finger table index %v. Finding successor for key %v", kord.next+1, nextEntry)
-	ret := kord.FindSuccessorInternal(nextEntry)
-	go func() { kord.fixFingersResponseChan <- FindSuccessorResponse{ret: ret, err: nil, forJoin: false} }()
+	go func(_nextId, _nextEntry uint64) {
+		ret := kord.FindSuccessorInternal(_nextEntry)
+		kord.fixFingersResponseChan <- FindSuccessorResponse{ret: ret, err: nil, forJoin: false, nextID: _nextId}
+	}(kord.next, nextEntry)
 }
 
 // FindSuccessorInternal implements find successor at our node
@@ -214,7 +216,17 @@ func (kord *Chord) FindSuccessorInternal(id uint64) *pb.FindSuccessorRet {
 	}
 	closest := kord.ClosestPrecedingInternal(id)
 	log.Printf("Successor found: %v:%v", closest, kord.ringMap[closest].IP)
-	return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP}
+	if closest == kord.ID { // Edge case if we are restablizing the network
+		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP}
+	}
+	// Make the RPC call to our n` closest node
+	ret, fsErr := kord.ringMap[closest].conn.FindSuccessorRPC(context.Background(), &pb.FindSuccessorArgs{Id: id})
+	if fsErr != nil {
+		log.Printf(red("Could not probe successor"))
+		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP}
+	}
+	return &pb.FindSuccessorRet{SuccessorId: ret.SuccessorId, SuccessorIp: ret.SuccessorIp}
+
 }
 
 // NotifyInternal implements the notify behavior at our Node
@@ -336,7 +348,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 
 		// We received fix fingers response back from ourselves
 		case ff := <-chord.fixFingersResponseChan:
-			chord.finger[ff.nextId] = ff.ret.SuccessorId
+			chord.finger[ff.nextID] = ff.ret.SuccessorId
 			addToRing(ff.ret.SuccessorId, ff.ret.SuccessorIp, chord.ringMap)
 
 		// We received find successor request
@@ -379,7 +391,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				if between(pr.ret.PredecessorId, chord.ID, chord.successor, false) {
 					log.Printf("Updating successor: %v:%v", pr.ret.PredecessorId, pr.ret.PredecessorIp)
 					chord.successor = pr.ret.PredecessorId
-                    chord.finger[0] = chord.successor
+					chord.finger[0] = chord.successor
 					addToRing(pr.ret.PredecessorId, pr.ret.PredecessorIp, chord.ringMap)
 				}
 				notifyReq := &pb.NotifyArgs{PredecessorId: myID, PredecessorIp: myIP}
