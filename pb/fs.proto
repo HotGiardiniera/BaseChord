@@ -36,13 +36,20 @@ message Error {
     string msg = 1;
 }
 
+// If an file is on a different server
+message Redirect {
+    string server = 1;
+}
+
 // Represents an operation result.
 message Result {
     oneof result {
         Data data = 1;
         Success success = 2;
         FileNotFound notFound = 3;
+        Redirect redirect = 4;
     }
+    //string nodeIp = 5;
 }
 
 // File system service

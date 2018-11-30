@@ -323,13 +323,39 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 
 		// We received client request
 		case op := <-fs.C:
-			log.Printf("Received command from client to %v data key %v", op.command.Operation, op.command.Arg)
+			log.Printf(yellow("Received command from client to %v data key %v"), op.command.Operation, op.command.GetArg())
 			// If we are not connected to the ring yet, defer this command until later
 			if chord.successor == myID || chord.predecessor == myID {
 				log.Printf("Not connected to ring yet. Deferring command to later")
-				fs.C <- op
+				//fs.C <- op
+				op.response <- pb.Result{Result: &pb.Result_NotFound{NotFound: &pb.FileNotFound{}}} // Default file not found for now. TODO remove
+
 			} else {
-				fs.HandleCommand(op)
+				// Determine where this bad boy needs to go
+                var file string
+				switch c := op.command; c.Operation {
+				case pb.Op_GET:
+                    file = op.command.GetGet().Name
+                case pb.Op_STORE:
+                    file = op.command.GetStore().Name
+                case pb.Op_DELETE:
+                    file = op.command.GetDelete().Name
+                default:
+                    file = ""
+				}
+				
+				if file != "" {
+					// Get find the closest successor to the arg
+					location := generateIDFromIP(file)
+					log.Printf(yellow("ring location: %v"), location)
+					node := chord.FindSuccessorInternal(location)
+					// If we are the closest node we can execute the command, otherwise forward to the node where this file should
+					if node.SuccessorId == chord.ID {
+						fs.HandleCommand(op)
+					} else { // respond with a  forward
+						op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: node.SuccessorIp }}}
+					}
+				}
 			}
 
 		// Find successor has returned result
@@ -408,7 +434,9 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				succ := chord.ringMap[chord.successor].conn
 				go chord.StabilizeInternal(succ)
 				chord.FixFingersInternal()
-				log.Printf(green("%v"), chord)
+				if !debug {
+					log.Printf(green("%v"), chord)
+				}
 			}
 			restartTimer(chord.stabilizeTimer, StabilizeTimeout)
 
