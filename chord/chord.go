@@ -332,18 +332,18 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 
 			} else {
 				// Determine where this bad boy needs to go
-                var file string
+				var file string
 				switch c := op.command; c.Operation {
 				case pb.Op_GET:
-                    file = op.command.GetGet().Name
-                case pb.Op_STORE:
-                    file = op.command.GetStore().Name
-                case pb.Op_DELETE:
-                    file = op.command.GetDelete().Name
-                default:
-                    file = ""
+					file = op.command.GetGet().Name
+				case pb.Op_STORE:
+					file = op.command.GetStore().Name
+				case pb.Op_DELETE:
+					file = op.command.GetDelete().Name
+				default:
+					file = ""
 				}
-				
+
 				if file != "" {
 					// Get find the closest successor to the arg
 					location := generateIDFromIP(file)
@@ -353,7 +353,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 					if node.SuccessorId == chord.ID {
 						fs.HandleCommand(op)
 					} else { // respond with a  forward
-						op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: node.SuccessorIp }}}
+						op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: node.SuccessorIp}}}
 					}
 				}
 			}
