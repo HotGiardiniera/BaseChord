@@ -25,25 +25,21 @@ Example usage of client below
 ```
 vagrant@stretch[client]$ ./client -endpoint=stretch:3002 -call=store -file=test
 2018/11/30 21:36:58 Connecting to  stretch:3002
-2018/11/30 21:36:58 store
-2018/11/30 21:36:58 Soring file: test
+2018/11/30 21:36:58 Storing file: test
 2018/11/30 21:36:58 stretch:3002 respose: File test successfully stored/deleted!
 
 vagrant@stretch[client]$ ./client -endpoint=stretch:3002 -call=get -file=test
 2018/11/30 21:37:04 Connecting to  stretch:3002
-2018/11/30 21:37:04 get
 2018/11/30 21:37:04 Getting file: test
 2018/11/30 21:37:04 stretch:3002 respose: File test found! Data: test
 
 vagrant@stretch[client]$ ./client -endpoint=stretch:3002 -call=delete -file=test
 2018/11/30 21:37:10 Connecting to  stretch:3002
-2018/11/30 21:37:10 delete
 2018/11/30 21:37:10 Deleting file: test
 2018/11/30 21:37:10 stretch:3002 respose: File test successfully stored/deleted!
 
 vagrant@stretch[client]$ ./client -endpoint=stretch:3002 -call=get -file=test
 2018/11/30 21:37:12 Connecting to  stretch:3002
-2018/11/30 21:37:12 get
 2018/11/30 21:37:12 Getting file: test
 2018/11/30 21:37:12 stretch:3002 respose: File test not found!
 ```
