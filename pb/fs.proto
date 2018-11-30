@@ -49,7 +49,6 @@ message Result {
         FileNotFound notFound = 3;
         Redirect redirect = 4;
     }
-    //string nodeIp = 5;
 }
 
 // File system service

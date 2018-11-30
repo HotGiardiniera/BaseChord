@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	//"fmt"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -25,13 +25,19 @@ func Connect(server string) pb.FileSystemClient {
 	return pb.NewFileSystemClient(conn)
 }
 
-func handleResult(res *pb.Result, Server string) {
-    var message string
-    if notFound := res.GetNotFound(); notFound != nil {
-        message = "File not found!"
-    }
+func handleResult(res *pb.Result, file, Server string) {
+	var message string
+	if notFound := res.GetNotFound(); notFound != nil {
+		message = fmt.Sprintf("File %v not found!", file)
+	}
+	if stored := res.GetSuccess(); stored != nil {
+		message = fmt.Sprintf("File %v successfully stored/deleted!", file)
+	}
+	if found := res.GetData(); found != nil {
+		message = fmt.Sprintf("File %v found! Data: %v", file, found.Data)
+	}
 
-    log.Printf("%v respose: %v", Server, message)
+	log.Printf("%v respose: %v", Server, message)
 }
 
 func checkRedirect(res *pb.Result) (bool, string) {
@@ -46,10 +52,11 @@ func checkRedirect(res *pb.Result) (bool, string) {
 	return redirectTo != "", redirectTo
 }
 
-func basicGet(fs pb.FileSystemClient, Server string) {
+func Get(fs pb.FileSystemClient, fileName, Server string) {
 	// Request value for Chris
-	req := &pb.FileGet{Name: "Chris"}
+	req := &pb.FileGet{Name: fileName}
 	res, err := fs.Get(context.Background(), req)
+	log.Printf("Getting file: %v", fileName)
 	if err != nil {
 		log.Fatalf("Request error %v", err)
 	}
@@ -57,47 +64,77 @@ func basicGet(fs pb.FileSystemClient, Server string) {
 	if redirect {
 		log.Printf("File at a differnt node. Redirecting to: %v", redirectIP)
 		fs = Connect(redirectIP)
-		basicGet(fs, redirectIP)
+		Get(fs, fileName, redirectIP)
 	} else {
-        handleResult(res, Server)
+		handleResult(res, fileName, Server)
+	}
+}
+
+func Store(fs pb.FileSystemClient, fileName, Server string) {
+	// Request value for Chris
+	req := &pb.FileStore{Name: fileName, Data: &pb.Data{Data: fileName}}
+	res, err := fs.Store(context.Background(), req)
+	log.Printf("Soring file: %v", fileName)
+	if err != nil {
+		log.Fatalf("Request error %v", err)
+	}
+	redirect, redirectIP := checkRedirect(res)
+	if redirect {
+		log.Printf("File need to be stored at a differnt node. Redirecting to: %v", redirectIP)
+		fs = Connect(redirectIP)
+		Store(fs, fileName, redirectIP)
+	} else {
+		handleResult(res, fileName, Server)
+	}
+}
+
+func Delete(fs pb.FileSystemClient, fileName, Server string) {
+	// Request value for Chris
+	req := &pb.FileDelete{Name: fileName}
+	res, err := fs.Delete(context.Background(), req)
+	log.Printf("Deleting file: %v", fileName)
+	if err != nil {
+		log.Fatalf("Request error %v", err)
+	}
+	redirect, redirectIP := checkRedirect(res)
+	if redirect {
+		log.Printf("File need to be stored at a differnt node. Redirecting to: %v", redirectIP)
+		fs = Connect(redirectIP)
+		Delete(fs, fileName, redirectIP)
+	} else {
+		handleResult(res, fileName, Server)
 	}
 }
 
 func main() {
 	// Take endpoint as input
 	var call string
+	var fileName string
 	var endpoint string
 
 	flag.StringVar(&endpoint, "endpoint", "127.0.0.1:3000", "Client endpoint")
-	flag.StringVar(&call, "call", "main", "Choose single functions to run or OG main")
-	// flag.Usage = usage
+	flag.StringVar(&call, "call", "", "Choose single functions to run or OG main")
+	flag.StringVar(&fileName, "file", "default", "File name to get, insert, or delete")
 	flag.Parse()
-	// If there is no endpoint fail
-	// endpoint := flag.Args()[0]
-
-	// if flag.NArg() == 0 {
-	//  flag.Usage()
-	//  os.Exit(1)
-	// }
 
 	// Create a FileSystem client
 	fs := Connect(endpoint)
 
-	var fnc func(pb.FileSystemClient, string)
+	var fnc func(pb.FileSystemClient, string, string)
 
-	fnc = basicGet
+	switch call {
+	case "get":
+		log.Printf("get")
+		fnc = Get
+	case "store":
+		log.Printf("store")
+		fnc = Store
+	case "delete":
+		log.Printf("delete")
+		fnc = Delete
+	default:
+		fnc = Get
+	}
 
-	// TODO allow certain calls from the command line
-	// switch call {
-	// case "set":
-	//     log.Printf("set")
-	//     fnc = basic_set
-	// case "get":
-	//     log.Printf("get")
-	//     fnc = basic_get
-	// default:
-	//     fnc = originalMain
-	// }
-
-	fnc(fs, endpoint)
+	fnc(fs, fileName, endpoint)
 }
