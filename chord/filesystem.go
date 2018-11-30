@@ -63,16 +63,19 @@ func (fs *FileSystem) Delete(ctx context.Context, file *pb.FileDelete) (*pb.Resu
 //function assumes that it is called from a single thread of
 //execution, and hence does not handle races.
 func (fs *FileSystem) GetInternal(file string) pb.Result {
-	d := fs.fileSystem[file]
-	return pb.Result{Result: &pb.Result_Data{Data: &pb.Data{Data: d}}}
+	if d, ok := fs.fileSystem[file]; ok {
+		return pb.Result{Result: &pb.Result_Data{Data: &pb.Data{Data: d}}}
+	}
+	return pb.Result{Result: &pb.Result_NotFound{NotFound: &pb.FileNotFound{}}}
 }
 
 // StoreInternal : Used internally to set and generate an appropriate result. This
 //function assumes that it is called from a single
 //thread of execution and hence does not handle race conditions.
 func (fs *FileSystem) StoreInternal(f string, d *pb.Data) pb.Result {
+	log.Printf(yellow("attempting to store %s at %s"), f, d.Data)
 	fs.fileSystem[f] = d.Data
-	return pb.Result{Result: &pb.Result_Success{}}
+	return pb.Result{Result: &pb.Result_Success{Success: &pb.Success{}}}
 }
 
 // DeleteInternal : Used internally, this function clears a kv store. Assumes no
