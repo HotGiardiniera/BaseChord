@@ -50,7 +50,6 @@ Metrics are gatherd as JSON objects. Each request is it's own JSON object. The G
 
 TODO
 1. Better JSON file output (single rows right now, make a list)
-2. RPC changes to count hops
-3. Python file to analyze metrics
-4. P. Zave enhancements
-5. makefile and requirements section
+2. Python file to analyze metrics
+3. P. Zave enhancements
+4. makefile and requirements section
