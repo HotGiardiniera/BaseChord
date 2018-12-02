@@ -27,7 +27,7 @@ type RequestMetric struct {
 	SourceNode uint64
 	DestNode   uint64
 	FileID     uint64
-	Hops       uint64
+	Hops       uint32
 	Start      JSONTime
 	End        JSONTime
 }

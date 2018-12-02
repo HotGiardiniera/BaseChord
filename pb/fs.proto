@@ -79,12 +79,15 @@ message Command {
 // Input to FindSuccessor
 message FindSuccessorArgs {
     uint64 id = 1;
+    uint32 jumps = 2;  //This is used to track if FindSuccessor request came from previous node.
 }
 
 // Output from FindSuccessor
 message FindSuccessorRet {
     uint64 successorId = 1;
     string successorIp = 2;
+    uint32 jumps = 3;
+    uint64 finalDest = 4;
 }
 
 // Input to Notify
