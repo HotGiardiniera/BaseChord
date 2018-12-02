@@ -26,6 +26,7 @@ func (t JSONTime) MarshalJSON() ([]byte, error) {
 type RequestMetric struct {
 	SourceNode uint64
 	DestNode   uint64
+	FileID     uint64
 	Hops       uint64
 	Start      JSONTime
 	End        JSONTime

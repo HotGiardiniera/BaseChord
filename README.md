@@ -45,7 +45,12 @@ vagrant@stretch[client]$ ./client -endpoint=stretch:3002 -call=get -file=test
 ```
 
 
+### Metrics
+Metrics are gatherd as JSON objects. Each request is it's own JSON object. The Go struct associated with the returned JSON object can be found at $PROJECTROOT/chord/metric.go. Metric objects are created for every request that comes to a chord node. The metric object is then placed into a channel. At a certain interval (interval located at $PROJECTROOT/chord/utils.go `MetricsTimeout`) the metric buffer is then drained and each metric object is appended to a JSON file specific to each node. The JSON file is located the path specified in $PROJECTROOT/chord/metric.go as `METRICSFILE`. By default this will be `/tmp/node<ID>.JSON`.
+
 TODO
-1. Chord metrics (JSON)
-2. P. Zave enhancements
-3. makefile and requirements section
+1. Better JSON file output (single rows right now, make a list)
+2. RPC changes to count hops
+3. Python file to analyze metrics
+4. P. Zave enhancements
+5. makefile and requirements section

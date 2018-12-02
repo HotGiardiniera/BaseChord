@@ -269,7 +269,14 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 	debugPrintChan := make(chan string, 1)
 
 	// Metric writer channel
-	//metricWriteChan := make(chan RequestMetric)
+	metricWriteChan := make(chan RequestMetric, 1000)
+
+	// This is a fresh run of chord so delete an existing metrics file
+	filename := fmt.Sprintf(METRICSFILE, myID)
+	deleteErr := os.Remove(filename)
+	if deleteErr != nil {
+		log.Printf(yellow("Couldn't delete %v (file probably doesn't exist)"), filename)
+	}
 
 	var chord Chord
 	var fTable [M]uint64
@@ -353,13 +360,18 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 					// Get find the closest successor to the arg
 					location := generateIDFromIP(file)
 					log.Printf(yellow("ring location: %v"), location)
+					startTime := JSONTime(time.Now())
 					node := chord.FindSuccessorInternal(location)
+					endTime := JSONTime(time.Now())
 					// If we are the closest node we can execute the command, otherwise forward to the node where this file should
 					if node.SuccessorId == chord.ID {
 						fs.HandleCommand(op)
 					} else { // respond with a  forward
 						op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: node.SuccessorIp}}}
 					}
+					// TODO `DestNode` needs to come from the RPC response
+					// TODO `Hops` needs to come from the RPC
+					metricWriteChan <- RequestMetric{SourceNode: chord.ID, DestNode: node.SuccessorId, Hops: 0, Start: startTime, End: endTime}
 				}
 			}
 
@@ -456,6 +468,11 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				go chord.PingPredecessorInternal(pred)
 			}
 			restartTimer(chord.pingTimer, PingTimeout)
+
+		case <-chord.metricsTimer.C:
+			log.Println(cyan("Gathering metrics!!!"))
+			go gatherMetrics(metricWriteChan, chord.ID)
+			restartTimer(chord.metricsTimer, MetricsTimeout)
 
 		case <-debugPrintChan:
 			log.Printf(green("%v"), chord)

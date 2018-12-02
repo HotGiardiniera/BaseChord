@@ -17,7 +17,7 @@ const uint64MAX = ^uint64(0)
 const PingTimeout = 2000
 
 // StabilizeTimeout -> milliseconds to run stabilize
-const StabilizeTimeout = 5000
+const StabilizeTimeout = 2000
 
 // MetricsTimeout -> milliseconds to run our metric writer
 const MetricsTimeout = 6000
