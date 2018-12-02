@@ -75,17 +75,19 @@ func checkRedirect(res *pb.Result) (bool, string) {
 	redirectTo := ""
 	if redirect := res.GetRedirect(); redirect != nil {
 		redirectIP := strings.Split(redirect.Server, ":")
-		port, _ := strconv.Atoi(redirectIP[1])
-		sPort := strconv.Itoa(port - 1)
-		redirectIP[1] = sPort
-		redirectTo = strings.Join(redirectIP, ":")
-	}
-	if strings.Contains(redirectTo, "chord") {
-		redirectTo = redirectTo[:strings.Index(redirectTo, ":")]
+		if strings.Contains(redirect.Server, "chord") {
+			redirectTo = redirectIP[0]
+		} else {
+			port, _ := strconv.Atoi(redirectIP[1])
+			sPort := strconv.Itoa(port - 1)
+			redirectIP[1] = sPort
+			redirectTo = strings.Join(redirectIP, ":")
+		}
 	}
 	return redirectTo != "", redirectTo
 }
 
+// Get sends a file retrieval request to chord ring
 func Get(fs pb.FileSystemClient, fileName, Server string) {
 	// Request value for Chris
 	req := &pb.FileGet{Name: fileName}
@@ -104,6 +106,7 @@ func Get(fs pb.FileSystemClient, fileName, Server string) {
 	}
 }
 
+// Store sends a file storage request to chord ring
 func Store(fs pb.FileSystemClient, fileName, Server string) {
 	// Request value for Chris
 	req := &pb.FileStore{Name: fileName, Data: &pb.Data{Data: fileName}}
@@ -122,6 +125,7 @@ func Store(fs pb.FileSystemClient, fileName, Server string) {
 	}
 }
 
+// Delete sends a file removal request to chord ring
 func Delete(fs pb.FileSystemClient, fileName, Server string) {
 	// Request value for Chris
 	req := &pb.FileDelete{Name: fileName}
