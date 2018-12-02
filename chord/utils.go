@@ -19,6 +19,9 @@ const PingTimeout = 2000
 // StabilizeTimeout -> milliseconds to run stabilize
 const StabilizeTimeout = 5000
 
+// MetricsTimeout -> milliseconds to run our metric writer
+const MetricsTimeout = 6000
+
 // PowTwo raises 2 to the power of x
 func PowTwo(x uint64) uint64 {
 	return uint64(math.Pow(2, float64(x)))

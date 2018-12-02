@@ -65,6 +65,7 @@ type Chord struct {
 	// Timers
 	pingTimer      *time.Timer
 	stabilizeTimer *time.Timer
+	metricsTimer   *time.Timer
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -267,6 +268,9 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 	// Channel that will only add/drain in debug mode
 	debugPrintChan := make(chan string, 1)
 
+	// Metric writer channel
+	//metricWriteChan := make(chan RequestMetric)
+
 	var chord Chord
 	var fTable [M]uint64
 	rM := map[uint64]*RingNode{myID: &RingNode{IP: myIP}}
@@ -305,7 +309,8 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		findSuccessorResponseChan:   make(chan FindSuccessorResponse),
 		fixFingersResponseChan:      make(chan FindSuccessorResponse),
 		pingTimer:                   time.NewTimer(PingTimeout * time.Millisecond),
-		stabilizeTimer:              time.NewTimer(StabilizeTimeout * time.Millisecond)}
+		stabilizeTimer:              time.NewTimer(StabilizeTimeout * time.Millisecond),
+		metricsTimer:                time.NewTimer(MetricsTimeout * time.Millisecond)}
 
 	if joinNode != "" {
 		chord.JoinChan <- joinNode // Leave ourselves a message to join network

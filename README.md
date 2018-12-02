@@ -45,7 +45,7 @@ vagrant@stretch[client]$ ./client -endpoint=stretch:3002 -call=get -file=test
 ```
 
 
-##TODO
+TODO
 1. Chord metrics (JSON)
 2. P. Zave enhancements
 3. makefile and requirements section
