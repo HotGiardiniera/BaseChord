@@ -204,16 +204,17 @@ func (kord *Chord) FixFingersInternal() {
 	nextEntry := (kord.ID + PowTwo(kord.next)) % PowTwo(M)
 	log.Printf("Looking for successor of finger table index %v. Finding successor for key %v", kord.next+1, nextEntry)
 	go func(_nextId, _nextEntry uint64) {
-		ret := kord.FindSuccessorInternal(_nextEntry)
+		ret := kord.FindSuccessorInternal(_nextEntry, 0)
 		kord.fixFingersResponseChan <- FindSuccessorResponse{ret: ret, err: nil, forJoin: false, nextID: _nextId}
 	}(kord.next, nextEntry)
 }
 
 // FindSuccessorInternal implements find successor at our node
-func (kord *Chord) FindSuccessorInternal(id uint64) *pb.FindSuccessorRet {
+func (kord *Chord) FindSuccessorInternal(id uint64, jumpCount uint32) *pb.FindSuccessorRet {
 	if between(id, kord.ID, kord.successor, true) {
 		log.Printf("Successor found: %v:%v", kord.successor, kord.ringMap[kord.successor].IP)
-		return &pb.FindSuccessorRet{SuccessorId: kord.successor, SuccessorIp: kord.ringMap[kord.successor].IP}
+		return &pb.FindSuccessorRet{SuccessorId: kord.successor, SuccessorIp: kord.ringMap[kord.successor].IP,
+			FinalDest: kord.ID, Jumps: jumpCount}
 	}
 	closest := kord.ClosestPrecedingInternal(id)
 	log.Printf("Successor found: %v:%v", closest, kord.ringMap[closest].IP)
@@ -221,12 +222,12 @@ func (kord *Chord) FindSuccessorInternal(id uint64) *pb.FindSuccessorRet {
 		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP}
 	}
 	// Make the RPC call to our n` closest node
-	ret, fsErr := kord.ringMap[closest].conn.FindSuccessorRPC(context.Background(), &pb.FindSuccessorArgs{Id: id})
+	ret, fsErr := kord.ringMap[closest].conn.FindSuccessorRPC(context.Background(), &pb.FindSuccessorArgs{Id: id, Jumps: jumpCount + 1})
 	if fsErr != nil {
 		log.Printf(red("Could not probe successor"))
-		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP}
+		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP, Jumps: jumpCount}
 	}
-	return &pb.FindSuccessorRet{SuccessorId: ret.SuccessorId, SuccessorIp: ret.SuccessorIp}
+	return &pb.FindSuccessorRet{SuccessorId: ret.SuccessorId, SuccessorIp: ret.SuccessorIp, Jumps: ret.Jumps}
 
 }
 
@@ -361,7 +362,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 					location := generateIDFromIP(file)
 					log.Printf(yellow("ring location: %v"), location)
 					startTime := JSONTime(time.Now())
-					node := chord.FindSuccessorInternal(location)
+					node := chord.FindSuccessorInternal(location, 0)
 					endTime := JSONTime(time.Now())
 					// If we are the closest node we can execute the command, otherwise forward to the node where this file should
 					if node.SuccessorId == chord.ID {
@@ -370,8 +371,8 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 						op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: node.SuccessorIp}}}
 					}
 					// TODO `DestNode` needs to come from the RPC response
-					// TODO `Hops` needs to come from the RPC
-					metricWriteChan <- RequestMetric{SourceNode: chord.ID, DestNode: node.SuccessorId, Hops: 0, Start: startTime, End: endTime}
+					metricWriteChan <- RequestMetric{SourceNode: chord.ID, DestNode: node.FinalDest, Hops: node.Jumps,
+						FileID: location, Start: startTime, End: endTime}
 				}
 			}
 
@@ -397,7 +398,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		// We received find successor request
 		case fsReq := <-chord.FindSuccessorChan:
 			log.Printf(cyan("We received request to find successor for key %v"), fsReq.arg.Id)
-			fsReq.response <- *(chord.FindSuccessorInternal(fsReq.arg.Id))
+			fsReq.response <- *(chord.FindSuccessorInternal(fsReq.arg.Id, fsReq.arg.Jumps))
 
 		// We received notification from node that believes it's our predecessor
 		case nr := <-chord.NotifyChan:
