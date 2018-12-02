@@ -28,16 +28,16 @@ func Connect(server string) pb.FileSystemClient {
 func handleResult(res *pb.Result, file, Server string) {
 	var message string
 	if notFound := res.GetNotFound(); notFound != nil {
-		message = fmt.Sprintf("File %v not found!", file)
+		message = fmt.Sprintf("File \"%v\" not found!", file)
 	}
 	if stored := res.GetSuccess(); stored != nil {
-		message = fmt.Sprintf("File %v successfully stored/deleted!", file)
+		message = fmt.Sprintf("File \"%v\" successfully stored/deleted!", file)
 	}
 	if found := res.GetData(); found != nil {
-		message = fmt.Sprintf("File %v found! Data: %v", file, found.Data)
+		message = fmt.Sprintf("File \"%v\" found! Data: %v", file, found.Data)
 	}
 
-	log.Printf("%v respose: %v", Server, message)
+	log.Printf("%v response: %v", Server, message)
 }
 
 func checkRedirect(res *pb.Result) (bool, string) {
@@ -56,7 +56,7 @@ func Get(fs pb.FileSystemClient, fileName, Server string) {
 	// Request value for Chris
 	req := &pb.FileGet{Name: fileName}
 	res, err := fs.Get(context.Background(), req)
-	log.Printf("Getting file: %v", fileName)
+	log.Printf("Getting file: \"%v\"", fileName)
 	if err != nil {
 		log.Fatalf("Request error %v", err)
 	}
@@ -74,7 +74,7 @@ func Store(fs pb.FileSystemClient, fileName, Server string) {
 	// Request value for Chris
 	req := &pb.FileStore{Name: fileName, Data: &pb.Data{Data: fileName}}
 	res, err := fs.Store(context.Background(), req)
-	log.Printf("Soring file: %v", fileName)
+	log.Printf("Storing file: \"%v\"", fileName)
 	if err != nil {
 		log.Fatalf("Request error %v", err)
 	}
@@ -92,13 +92,13 @@ func Delete(fs pb.FileSystemClient, fileName, Server string) {
 	// Request value for Chris
 	req := &pb.FileDelete{Name: fileName}
 	res, err := fs.Delete(context.Background(), req)
-	log.Printf("Deleting file: %v", fileName)
+	log.Printf("Deleting file: \"%v\"", fileName)
 	if err != nil {
 		log.Fatalf("Request error %v", err)
 	}
 	redirect, redirectIP := checkRedirect(res)
 	if redirect {
-		log.Printf("File need to be stored at a differnt node. Redirecting to: %v", redirectIP)
+		log.Printf("File at a differnt node. Redirecting to: %v", redirectIP)
 		fs = Connect(redirectIP)
 		Delete(fs, fileName, redirectIP)
 	} else {
@@ -124,13 +124,10 @@ func main() {
 
 	switch call {
 	case "get":
-		log.Printf("get")
 		fnc = Get
 	case "store":
-		log.Printf("store")
 		fnc = Store
 	case "delete":
-		log.Printf("delete")
 		fnc = Delete
 	default:
 		fnc = Get
