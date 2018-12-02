@@ -129,7 +129,7 @@ func fingertoString(id uint64, ft *[M]uint64) string {
 	twoToTheM := PowTwo(M)
 	for i := 0; i < M; i++ {
 		retString += fmt.Sprintf("|%5v|%5v|%5v|\n|-----|-----|-----|\n",
-			i, (id+PowTwo(uint64(i)))%twoToTheM, ft[i])
+			i+1, (id+PowTwo(uint64(i)))%twoToTheM, ft[i])
 	}
 	return retString
 }

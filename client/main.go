@@ -11,11 +11,42 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/nyu-distributed-systems-fa18/BaseChord/pb"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	// "k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
+// Connect to desired port or chord peer
 func Connect(server string) pb.FileSystemClient {
+	// If user passed in chord client:
+	if strings.Contains(server, "chord") {
+		config, err := clientcmd.BuildConfigFromFlags("", "/home/vagrant/.kube/config")
+		if err != nil {
+			panic(err.Error())
+		}
+		// creates the clientset
+		clientset, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			panic(err.Error())
+		}
+		pods, err := clientset.CoreV1().Pods("").List(metav1.ListOptions{})
+		if err != nil {
+			panic(err.Error())
+		}
+		for _, pod := range pods.Items {
+			if pod.Name == server {
+				log.Printf("Connecting to %v: %v", server, pod.Status.PodIP)
+				server = pod.Status.PodIP + ":3000"
+				break
+			}
+		}
+	} else {
+		log.Printf("Connecting to %v", server)
+	}
+
 	// Connect to the server. We use WithInsecure since we do not configure https in this class.
-	log.Printf("Connecting to  %v", server)
 	conn, err := grpc.Dial(server, grpc.WithInsecure())
 	//Ensure connection did not fail.
 	if err != nil {
@@ -48,6 +79,9 @@ func checkRedirect(res *pb.Result) (bool, string) {
 		sPort := strconv.Itoa(port - 1)
 		redirectIP[1] = sPort
 		redirectTo = strings.Join(redirectIP, ":")
+	}
+	if strings.Contains(redirectTo, "chord") {
+		redirectTo = redirectTo[:strings.Index(redirectTo, ":")]
 	}
 	return redirectTo != "", redirectTo
 }

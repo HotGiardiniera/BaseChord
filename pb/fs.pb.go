@@ -20,7 +20,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
+const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
 // Internal representations for operations.
 type Op int32
@@ -464,14 +464,116 @@ func (m *Result) GetRedirect() *Redirect {
 	return nil
 }
 
-// XXX_OneofWrappers is for the internal use of the proto package.
-func (*Result) XXX_OneofWrappers() []interface{} {
-	return []interface{}{
+// XXX_OneofFuncs is for the internal use of the proto package.
+func (*Result) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+	return _Result_OneofMarshaler, _Result_OneofUnmarshaler, _Result_OneofSizer, []interface{}{
 		(*Result_Data)(nil),
 		(*Result_Success)(nil),
 		(*Result_NotFound)(nil),
 		(*Result_Redirect)(nil),
 	}
+}
+
+func _Result_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*Result)
+	// result
+	switch x := m.Result.(type) {
+	case *Result_Data:
+		b.EncodeVarint(1<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Data); err != nil {
+			return err
+		}
+	case *Result_Success:
+		b.EncodeVarint(2<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Success); err != nil {
+			return err
+		}
+	case *Result_NotFound:
+		b.EncodeVarint(3<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.NotFound); err != nil {
+			return err
+		}
+	case *Result_Redirect:
+		b.EncodeVarint(4<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Redirect); err != nil {
+			return err
+		}
+	case nil:
+	default:
+		return fmt.Errorf("Result.Result has unexpected type %T", x)
+	}
+	return nil
+}
+
+func _Result_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+	m := msg.(*Result)
+	switch tag {
+	case 1: // result.data
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(Data)
+		err := b.DecodeMessage(msg)
+		m.Result = &Result_Data{msg}
+		return true, err
+	case 2: // result.success
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(Success)
+		err := b.DecodeMessage(msg)
+		m.Result = &Result_Success{msg}
+		return true, err
+	case 3: // result.notFound
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(FileNotFound)
+		err := b.DecodeMessage(msg)
+		m.Result = &Result_NotFound{msg}
+		return true, err
+	case 4: // result.redirect
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(Redirect)
+		err := b.DecodeMessage(msg)
+		m.Result = &Result_Redirect{msg}
+		return true, err
+	default:
+		return false, nil
+	}
+}
+
+func _Result_OneofSizer(msg proto.Message) (n int) {
+	m := msg.(*Result)
+	// result
+	switch x := m.Result.(type) {
+	case *Result_Data:
+		s := proto.Size(x.Data)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *Result_Success:
+		s := proto.Size(x.Success)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *Result_NotFound:
+		s := proto.Size(x.NotFound)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *Result_Redirect:
+		s := proto.Size(x.Redirect)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case nil:
+	default:
+		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
+	}
+	return n
 }
 
 // A type for arguments across all operations
@@ -569,13 +671,97 @@ func (m *Command) GetDelete() *FileDelete {
 	return nil
 }
 
-// XXX_OneofWrappers is for the internal use of the proto package.
-func (*Command) XXX_OneofWrappers() []interface{} {
-	return []interface{}{
+// XXX_OneofFuncs is for the internal use of the proto package.
+func (*Command) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+	return _Command_OneofMarshaler, _Command_OneofUnmarshaler, _Command_OneofSizer, []interface{}{
 		(*Command_Get)(nil),
 		(*Command_Store)(nil),
 		(*Command_Delete)(nil),
 	}
+}
+
+func _Command_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*Command)
+	// arg
+	switch x := m.Arg.(type) {
+	case *Command_Get:
+		b.EncodeVarint(2<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Get); err != nil {
+			return err
+		}
+	case *Command_Store:
+		b.EncodeVarint(3<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Store); err != nil {
+			return err
+		}
+	case *Command_Delete:
+		b.EncodeVarint(4<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Delete); err != nil {
+			return err
+		}
+	case nil:
+	default:
+		return fmt.Errorf("Command.Arg has unexpected type %T", x)
+	}
+	return nil
+}
+
+func _Command_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+	m := msg.(*Command)
+	switch tag {
+	case 2: // arg.get
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(FileGet)
+		err := b.DecodeMessage(msg)
+		m.Arg = &Command_Get{msg}
+		return true, err
+	case 3: // arg.store
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(FileStore)
+		err := b.DecodeMessage(msg)
+		m.Arg = &Command_Store{msg}
+		return true, err
+	case 4: // arg.delete
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(FileDelete)
+		err := b.DecodeMessage(msg)
+		m.Arg = &Command_Delete{msg}
+		return true, err
+	default:
+		return false, nil
+	}
+}
+
+func _Command_OneofSizer(msg proto.Message) (n int) {
+	m := msg.(*Command)
+	// arg
+	switch x := m.Arg.(type) {
+	case *Command_Get:
+		s := proto.Size(x.Get)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *Command_Store:
+		s := proto.Size(x.Store)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *Command_Delete:
+		s := proto.Size(x.Delete)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case nil:
+	default:
+		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
+	}
+	return n
 }
 
 // Input to FindSuccessor
