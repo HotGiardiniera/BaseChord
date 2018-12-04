@@ -277,7 +277,8 @@ func (kord *Chord) NotifyInternal(id uint64, ip string, fs *FileSystem) *pb.Noti
 		filesToPass := fs.MoveInternal(kord.ID, id)
 		for name, data := range filesToPass {
 			go func(predecessor pb.ChordClient, predID uint64, fileName string, fileData string) {
-				fs.C <- InputChannelType{command: pb.Command{Operation: pb.Op_DELETE, Arg: &pb.Command_Delete{Delete: &pb.FileDelete{Name: fileName}}}, response: make(chan pb.Result)} // delete file interally
+				fs.C <- InputChannelType{command: pb.Command{Operation: pb.Op_DELETE, Arg: &pb.Command_Delete{Delete: &pb.FileDelete{Name: fileName}}}, response: make(chan pb.Result)}
+				log.Printf("Moving file %v to our new predecessor", fileName)
 				res, err := predecessor.MoveFileRPC(context.Background(), &pb.MoveFileArgs{Name: fileName, Data: fileData})
 				kord.moveFileResponseChan <- MoveFileResponse{ret: res, err: err, predecessorID: predID, fileName: fileName, fileData: fileData}
 			}(kord.ringMap[id].conn, id, name, data)
@@ -297,7 +298,7 @@ func (kord *Chord) PingPredecessorInternal(predecessor pb.ChordClient) {
 // MoveFileInternal handles the storing of any files that were sent to us our
 //predecessor when we joined the ring
 func (kord *Chord) MoveFileInternal(movedFile *pb.MoveFileArgs, fs *FileSystem) pb.MoveFileRet {
-	fs.StoreInternal(movedFile.Name, &pb.Data{Data: movedFile.Data})
+	fs.C <- InputChannelType{command: pb.Command{Operation: pb.Op_STORE, Arg: &pb.Command_Store{Store: &pb.FileStore{Name: movedFile.Name, Data: &pb.Data{Data: movedFile.Data}}}}, response: make(chan pb.Result)}
 	return pb.MoveFileRet{Success: true}
 }
 
@@ -423,6 +424,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 
 		// We received a file from our successor after we joined the network
 		case mf := <-chord.MoveFileChan:
+			log.Printf("Received request from our successor to store file %v", mf.arg.Name)
 			mf.response <- chord.MoveFileInternal(mf.arg, fs)
 
 		// Find successor has returned result
@@ -473,6 +475,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		case mfr := <-chord.moveFileResponseChan:
 			// Check if we need to retry the request
 			if mfr.err != nil {
+				log.Printf("Moving file %v to node %v failed. Retrying...", mfr.fileName, mfr.predecessorID)
 				go func(predecessor pb.ChordClient, predID uint64, fileName string, fileData string) {
 					res, err := predecessor.MoveFileRPC(context.Background(), &pb.MoveFileArgs{Name: fileName, Data: fileData})
 					chord.moveFileResponseChan <- MoveFileResponse{ret: res, err: err, predecessorID: predID, fileName: fileName, fileData: fileData}
