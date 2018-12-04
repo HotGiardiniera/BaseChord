@@ -369,10 +369,10 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 						fs.HandleCommand(op)
 					} else { // respond with a  forward
 						op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: node.SuccessorIp}}}
+						// TODO `DestNode` needs to come from the RPC response
+						metricWriteChan <- RequestMetric{SourceNode: chord.ID, DestNode: node.FinalDest, Hops: node.Jumps,
+							FileID: location, Start: startTime, End: endTime}
 					}
-					// TODO `DestNode` needs to come from the RPC response
-					metricWriteChan <- RequestMetric{SourceNode: chord.ID, DestNode: node.FinalDest, Hops: node.Jumps,
-						FileID: location, Start: startTime, End: endTime}
 				}
 			}
 
@@ -477,6 +477,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 
 		case <-debugPrintChan:
 			log.Printf(green("%v"), chord)
+			PrintFS(fs.fileSystem)
 		}
 
 	}

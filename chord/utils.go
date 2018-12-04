@@ -143,7 +143,17 @@ func (kord Chord) String() string {
 		kord.ID, kord.ID, kord.IP)
 	retString += fmt.Sprintf("Successor: %v\n", kord.successor)
 	retString += fmt.Sprintf("Predecessor: %v\n", kord.predecessor)
-	// Finger table TODO
+	// Finger table
 	retString += fmt.Sprintf("Finger_table:\n%v", fingertoString(kord.ID, &kord.finger))
+	// Node File system
 	return retString
+}
+
+func PrintFS(fs map[string]string) {
+	retString := "\n|------FileName------|-----Data-----\n"
+	for key, value := range fs {
+		retString += fmt.Sprintf("|%-20v|%-20v", key, value)
+        retString += "\n|--------------------|--------------\n"
+	}
+	log.Printf(green("%v"), retString)
 }
