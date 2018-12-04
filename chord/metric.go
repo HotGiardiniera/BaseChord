@@ -14,8 +14,6 @@ const METRICSFILE = "/tmp/node%v.JSON"
 //JSONTime -> type to easily marshal to proper json time
 type JSONTime time.Time
 
-// FORMAT FOR PYTHON datetime.datetime.strptime(t1, "%Y-%m-%dT%H:%M:%S.%f")
-
 // MarshalJSON for formatting time
 func (t JSONTime) MarshalJSON() ([]byte, error) {
 	stamp := fmt.Sprintf("\"%s\"", time.Time(t).Format("2006-01-02T15:04:05.999999"))
