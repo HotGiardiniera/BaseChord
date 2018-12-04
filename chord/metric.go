@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const REQUSTMETRIC = 1
+
 // METRICSFILE represents where we will write our JSON metrics
 const METRICSFILE = "/tmp/node%v.JSON"
 
@@ -22,6 +24,7 @@ func (t JSONTime) MarshalJSON() ([]byte, error) {
 
 //RequestMetric -> object that we will use in chord to gather metrics on requests
 type RequestMetric struct {
+	Class      uint32
 	SourceNode uint64
 	DestNode   uint64
 	FileID     uint64

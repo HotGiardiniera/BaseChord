@@ -153,7 +153,7 @@ func PrintFS(fs map[string]string) {
 	retString := "\n|------FileName------|-----Data-----\n"
 	for key, value := range fs {
 		retString += fmt.Sprintf("|%-20v|%-20v", key, value)
-        retString += "\n|--------------------|--------------\n"
+		retString += "\n|--------------------|--------------\n"
 	}
 	log.Printf(green("%v"), retString)
 }

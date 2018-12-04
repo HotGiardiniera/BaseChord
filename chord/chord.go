@@ -214,12 +214,13 @@ func (kord *Chord) FindSuccessorInternal(id uint64, jumpCount uint32) *pb.FindSu
 	if between(id, kord.ID, kord.successor, true) {
 		log.Printf("Successor found: %v:%v", kord.successor, kord.ringMap[kord.successor].IP)
 		return &pb.FindSuccessorRet{SuccessorId: kord.successor, SuccessorIp: kord.ringMap[kord.successor].IP,
-			FinalDest: kord.ID, Jumps: jumpCount}
+			FinalDest: kord.successor, Jumps: jumpCount}
 	}
 	closest := kord.ClosestPrecedingInternal(id)
 	log.Printf("Successor found: %v:%v", closest, kord.ringMap[closest].IP)
 	if closest == kord.ID { // Edge case if we are restablizing the network
-		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP}
+		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP, 
+            FinalDest: closest}
 	}
 	// Make the RPC call to our n` closest node
 	ret, fsErr := kord.ringMap[closest].conn.FindSuccessorRPC(context.Background(), &pb.FindSuccessorArgs{Id: id, Jumps: jumpCount + 1})
@@ -227,7 +228,8 @@ func (kord *Chord) FindSuccessorInternal(id uint64, jumpCount uint32) *pb.FindSu
 		log.Printf(red("Could not probe successor"))
 		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP, Jumps: jumpCount}
 	}
-	return &pb.FindSuccessorRet{SuccessorId: ret.SuccessorId, SuccessorIp: ret.SuccessorIp, Jumps: ret.Jumps}
+	return &pb.FindSuccessorRet{SuccessorId: ret.SuccessorId, SuccessorIp: ret.SuccessorIp, Jumps: ret.Jumps, 
+        FinalDest:ret.SuccessorId}
 
 }
 
@@ -370,8 +372,9 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 					} else { // respond with a  forward
 						op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: node.SuccessorIp}}}
 						// TODO `DestNode` needs to come from the RPC response
-						metricWriteChan <- RequestMetric{SourceNode: chord.ID, DestNode: node.FinalDest, Hops: node.Jumps,
-							FileID: location, Start: startTime, End: endTime}
+						metricWriteChan <- RequestMetric{Class: REQUSTMETRIC, SourceNode: chord.ID,
+							DestNode: node.FinalDest, Hops: node.Jumps, FileID: location,
+							Start: startTime, End: endTime}
 					}
 				}
 			}
