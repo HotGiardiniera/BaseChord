@@ -120,10 +120,22 @@ message PingSuccessorRet {
     string predecessorIp = 2;
 }
 
+// Input to MoveFile
+message MoveFileArgs {
+  string name = 1;
+  string data = 2;
+}
+
+// Output from MoveFile
+message MoveFileRet {
+  bool success = 1;
+}
+
 // Chord service
 service Chord {
     rpc FindSuccessorRPC(FindSuccessorArgs) returns (FindSuccessorRet) {}
     rpc NotifyRPC(NotifyArgs) returns (NotifyRet) {}
     rpc PingPredecessorRPC(PingPredecessorArgs) returns (PingPredecessorRet) {}
     rpc PingSuccessorRPC(PingSuccessorArgs) returns (PingSuccessorRet) {}
+    rpc MoveFileRPC(MoveFileArgs) returns (MoveFileRet) {}
 }
