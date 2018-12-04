@@ -34,7 +34,6 @@ def find_pods(v1):
                 len(p.spec.containers) == 1 and \
                 p.spec.containers[0].image == 'local-chord-node'
     pods_we_own = filter(pod_filter, ret.items)
-    print("Killing:", pods_we_own)
     return pods_we_own
 
 def kill_pods(args):
@@ -42,6 +41,7 @@ def kill_pods(args):
     pods = find_pods(v1)
     for pod in pods:
         try:
+            print("Killing:", pod.metadata.name)
             shutdown_pod(v1, pod.metadata.name, pod.metadata.namespace)
         except Exception as e:
             print("Error in killing %s %s"%(i, e), file=sys.stderr)
