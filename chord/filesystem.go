@@ -89,6 +89,20 @@ func (fs *FileSystem) DeleteInternal(f string) pb.Result {
 	return pb.Result{Result: &pb.Result_NotFound{NotFound: &pb.FileNotFound{}}}
 }
 
+// MoveInternal : Used internally to flag any files that should be passed to a
+//predecessor
+func (fs *FileSystem) MoveInternal(myID, predecessorID uint64) map[string]string {
+	var fileHash uint64
+	var filesToMove map[string]string
+	for name, data := range fs.fileSystem {
+		fileHash = generateIDFromIP(name)
+		if between(fileHash, predecessorID, myID, false) { // do not want inclusive range
+			filesToMove[name] = data
+		}
+	}
+	return filesToMove
+}
+
 // HandleCommand is interface to raft part of the server
 func (fs *FileSystem) HandleCommand(op InputChannelType) {
 	switch c := op.command; c.Operation {
