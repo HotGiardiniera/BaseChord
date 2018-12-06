@@ -46,6 +46,41 @@ def kill_pods(args):
         except Exception as e:
             print("Error in killing %s %s"%(i, e), file=sys.stderr)
 
+def boot_more(args):
+    """Boot new individual pod(s)"""
+    v1 = init_kube()
+    pods = list(find_pods(v1))
+    if len(pods) == 0:
+        print("Cannot add nodes, since ring has not been initialized.\nPlease run boot command first.")
+        exit()
+    current_pod_count = len(pods)
+    with open(os.path.join(sys.path[0], 'ring-node-template.yml')) as f:
+        specs = list(yaml.load_all(f))
+        peer0_node = "chord0:3001"
+    for i in range(args.nodes):
+        name = "chord%s"%(current_pod_count + i)
+        spec_copy = copy.deepcopy(specs)
+        pod_spec = spec_copy[0]
+        pod_spec['metadata']['name'] = name
+        pod_spec['metadata']['labels']['app'] = name
+        pod_spec['spec']['containers'][0]['ports'][0]['name']="%s-client"%name
+        pod_spec['spec']['containers'][0]['ports'][1]['name']="%s-chord"%name
+        chord_args = ['chord']
+        chord_args += ['-join', peer0_node]
+        pod_spec['spec']['containers'][0]['command'] = chord_args
+        service_spec =  spec_copy[1]
+        # Create a service spec for this service
+        service_spec['metadata']['name'] = name
+        service_spec['spec']['selector']['app'] = name
+        service_spec['spec']['ports'][0]['targetPort'] = "%s-client"%name
+        service_spec['spec']['ports'][1]['targetPort'] = "%s-chord"%name
+        try:
+            response = v1.create_namespaced_pod('default', pod_spec)
+            response = v1.create_namespaced_service('default', service_spec)
+        except:
+            print("Could not launch pod or service")
+            raise
+
 def boot(args):
     # Boot n pods
     v1 = init_kube()
@@ -87,6 +122,10 @@ def main():
     run_parser = subparsers.add_parser("boot")
     run_parser.add_argument('nodes', type=int, default=3, help='How many chord nodes?')
     run_parser.set_defaults(func = boot)
+
+    run_parser = subparsers.add_parser("add")
+    run_parser.add_argument('nodes', type=int, default=1, help='How many chord nodes to add to the ring?')
+    run_parser.set_defaults(func = boot_more)
 
     shutdown_parser = subparsers.add_parser("shutdown")
     shutdown_parser.set_defaults(func=kill_pods)
