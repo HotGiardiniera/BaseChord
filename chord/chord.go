@@ -522,7 +522,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				go chord.StabilizeInternal(succ)
 				chord.FixFingersInternal()
 				if !debug {
-					log.Printf(green("%v"), chord)
+					debugPrintChan <- "a"
 				}
 			}
 			restartTimer(chord.stabilizeTimer, StabilizeTimeout)
