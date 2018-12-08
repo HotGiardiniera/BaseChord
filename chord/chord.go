@@ -436,7 +436,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				log.Printf(red("Could not join network. Err: %v"), fsRes.err)
 				chord.JoinChan <- joinNode // retry connection (by putting value on join chan)
 			} else {
-				log.Printf(green("Our successor: %v:%v"), fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp)
+				//log.Printf(green("Our successor: %v:%v"), fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp)
 				chord.successor = fsRes.ret.SuccessorId
 				chord.finger[0] = chord.successor
 				addToRing(fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp, chord.ringMap)
@@ -455,22 +455,22 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 
 		// We received find successor request
 		case fsReq := <-chord.FindSuccessorChan:
-			log.Printf(cyan("We received request to find successor for key %v"), fsReq.arg.Id)
+			//log.Printf(cyan("We received request to find successor for key %v"), fsReq.arg.Id)
 			fsReq.response <- *(chord.FindSuccessorInternal(fsReq.arg.Id, fsReq.arg.Jumps))
 
 		// We received notification from node that believes it's our predecessor
 		case nr := <-chord.NotifyChan:
-			log.Printf("Received notify from potential predecessor. %v:%v", nr.arg.PredecessorId, nr.arg.PredecessorIp)
+			//log.Printf("Received notify from potential predecessor. %v:%v", nr.arg.PredecessorId, nr.arg.PredecessorIp)
 			nr.response <- *(chord.NotifyInternal(nr.arg.PredecessorId, nr.arg.PredecessorIp, fs))
 
 		// We received ping from our successor to make sure we're still online
 		case ping := <-chord.PingFromSuccessorChan:
-			log.Printf("Received ping from successor")
+			//log.Printf("Received ping from successor")
 			ping.response <- pb.PingPredecessorRet{}
 
 		// We received ping from a node behind us asking us for our predecessor's id
 		case ping := <-chord.PingFromPredecessorChan:
-			log.Printf("Ping from node behind us in the ring. Responding: %v:%v", chord.predecessor, chord.ringMap[chord.predecessor].IP)
+			//log.Printf("Ping from node behind us in the ring. Responding: %v:%v", chord.predecessor, chord.ringMap[chord.predecessor].IP)
 			ping.response <- pb.PingSuccessorRet{PredecessorId: chord.predecessor,
 				PredecessorIp: chord.ringMap[chord.predecessor].IP}
 
@@ -478,7 +478,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		case mfr := <-chord.moveFileResponseChan:
 			// Check if we need to retry the request
 			if mfr.err != nil {
-				log.Printf("Moving file %v to node %v failed. Retrying...", mfr.fileName, mfr.predecessorID)
+				log.Printf(yellow("Moving file %v to node %v failed. Retrying..."), mfr.fileName, mfr.predecessorID)
 				go func(predecessor pb.ChordClient, predID uint64, fileName string, fileData string) {
 					res, err := predecessor.MoveFileRPC(context.Background(), &pb.MoveFileArgs{Name: fileName, Data: fileData})
 					chord.moveFileResponseChan <- MoveFileResponse{ret: res, err: err, predecessorID: predID, fileName: fileName, fileData: fileData}
@@ -492,17 +492,17 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				chord.predecessor = myID //predecessor failed revert to start state predecessor
 			} else {
 				// We've recived a ping response from just respond
-				log.Printf("Got ping response!")
+				log.Printf(green("Got ping response!"))
 			}
 
 		// We received a response from asking our successor who its predecessor is
 		//(This is part of the stabilize protocol)
 		case pr := <-chord.pingSuccessorResponseChan:
 			if pr.err != nil {
-				log.Printf("Failed to ping our successor!")
+				log.Printf(cyan("Failed to ping our successor!"))  
 			} else {
 				if between(pr.ret.PredecessorId, chord.ID, chord.successor, false) {
-					log.Printf("Updating successor: %v:%v", pr.ret.PredecessorId, pr.ret.PredecessorIp)
+					//log.Printf("Updating successor: %v:%v", pr.ret.PredecessorId, pr.ret.PredecessorIp)
 					chord.successor = pr.ret.PredecessorId
 					chord.finger[0] = chord.successor
 					addToRing(pr.ret.PredecessorId, pr.ret.PredecessorIp, chord.ringMap)
@@ -517,7 +517,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 			if chord.successor == chord.ID {
 				log.Printf("Stabilize timer went off, but we are not integrated into network yet, so ignoring it.")
 			} else {
-				log.Printf("Running stabilize & fix fingers protocols...")
+				//log.Printf("Running stabilize & fix fingers protocols...")
 				succ := chord.ringMap[chord.successor].conn
 				go chord.StabilizeInternal(succ)
 				chord.FixFingersInternal()
@@ -533,14 +533,14 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 			if chord.predecessor == chord.ID {
 				log.Printf("Ping predecessor timer went off, but we are not integrated into network yet, so ignoring it.")
 			} else {
-				log.Printf("Pinging our predecessor %v:%v", chord.predecessor, chord.ringMap[chord.predecessor].IP)
+				//log.Printf("Pinging our predecessor %v:%v", chord.predecessor, chord.ringMap[chord.predecessor].IP)
 				pred := chord.ringMap[chord.predecessor].conn
 				go chord.PingPredecessorInternal(pred)
 			}
 			restartTimer(chord.pingTimer, PingTimeout)
 
 		case <-chord.metricsTimer.C:
-			log.Println(cyan("Gathering metrics!!!"))
+			//log.Println(cyan("Gathering metrics!!!"))
 			go gatherMetrics(metricWriteChan, chord.ID)
 			restartTimer(chord.metricsTimer, MetricsTimeout)
 

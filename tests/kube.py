@@ -36,6 +36,17 @@ def find_pods(v1):
     pods_we_own = filter(pod_filter, ret.items)
     return pods_we_own
 
+def kill_pod(args):
+    if args.node != -1:
+        v1 = init_kube()
+        pods = find_pods(v1)
+        peer = 'chord%d'%args.node
+        pod = list(filter(lambda i: i.metadata.name == peer, pods))
+        if len(pod) != 1:
+            sys.exit(1)
+        shutdown_pod(v1, pod[0].metadata.name, pod[0].metadata.namespace)
+
+
 def kill_pods(args):
     v1 = init_kube()
     pods = find_pods(v1)
@@ -126,6 +137,10 @@ def main():
     run_parser = subparsers.add_parser("add")
     run_parser.add_argument('nodes', type=int, default=1, help='How many chord nodes to add to the ring?')
     run_parser.set_defaults(func = boot_more)
+
+    run_parser = subparsers.add_parser("kill")
+    run_parser.add_argument('node', type=int, default=-1, help='target node to kill')
+    run_parser.set_defaults(func = kill_pod)
 
     shutdown_parser = subparsers.add_parser("shutdown")
     shutdown_parser.set_defaults(func=kill_pods)
