@@ -118,6 +118,7 @@ message PingSuccessorArgs {
 message PingSuccessorRet {
     uint64 predecessorId = 1;
     string predecessorIp = 2;
+    string successorList = 3;
 }
 
 // Input to MoveFile

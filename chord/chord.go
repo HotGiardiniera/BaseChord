@@ -12,6 +12,8 @@ import (
 
 	"bufio"
 	"os"
+	"strconv"
+	"strings"
 )
 
 /* ************** Chord structs ************** */
@@ -59,6 +61,7 @@ type Chord struct {
 	predecessor         uint64
 	ringMap             map[uint64]*RingNode
 	finger              [M]uint64
+	successors          [R]uint64
 	next                uint64
 	fixedFingersCounter uint64
 	// Request channels
@@ -245,8 +248,8 @@ func (kord *Chord) FindSuccessorInternal(id uint64, jumpCount uint32) *pb.FindSu
 	closest := kord.ClosestPrecedingInternal(id)
 	log.Printf("Successor found: %v:%v", closest, kord.ringMap[closest].IP)
 	if closest == kord.ID { // Edge case if we are restablizing the network
-		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP, 
-            FinalDest: closest}
+		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP,
+			FinalDest: closest}
 	}
 	// Make the RPC call to our n` closest node
 	ret, fsErr := kord.ringMap[closest].conn.FindSuccessorRPC(context.Background(), &pb.FindSuccessorArgs{Id: id, Jumps: jumpCount + 1})
@@ -254,8 +257,8 @@ func (kord *Chord) FindSuccessorInternal(id uint64, jumpCount uint32) *pb.FindSu
 		log.Printf(red("Could not probe successor"))
 		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP, Jumps: jumpCount}
 	}
-	return &pb.FindSuccessorRet{SuccessorId: ret.SuccessorId, SuccessorIp: ret.SuccessorIp, Jumps: ret.Jumps, 
-        FinalDest:ret.SuccessorId}
+	return &pb.FindSuccessorRet{SuccessorId: ret.SuccessorId, SuccessorIp: ret.SuccessorIp, Jumps: ret.Jumps,
+		FinalDest: ret.SuccessorId}
 
 }
 
@@ -273,6 +276,7 @@ func (kord *Chord) NotifyInternal(id uint64, ip string, fs *FileSystem) *pb.Noti
 		restartTimer(kord.pingTimer, PingTimeout)
 		if kord.ID == kord.successor {
 			kord.successor = kord.predecessor
+			kord.successors[0] = kord.predecessor
 			restartTimer(kord.stabilizeTimer, StabilizeTimeout)
 		}
 		// Pass any files that need to be
@@ -326,6 +330,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 
 	var chord Chord
 	var fTable [M]uint64
+	var successorList [R]uint64
 	rM := map[uint64]*RingNode{myID: &RingNode{IP: myIP}}
 
 	var reader *bufio.Reader
@@ -344,6 +349,10 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 	for i := 0; i < M; i++ {
 		fTable[i] = myID
 	}
+	for i := 0; i < R; i++ {
+		successorList[i] = myID
+	}
+
 	chord = Chord{
 		ID:                          myID,
 		IP:                          myIP,
@@ -351,6 +360,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		predecessor:                 myID,
 		ringMap:                     rM,
 		finger:                      fTable,
+		successors:                  successorList,
 		next:                        0,
 		fixedFingersCounter:         0,
 		JoinChan:                    make(chan string, 1),
@@ -434,14 +444,16 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		case fsRes := <-chord.findSuccessorResponseChan:
 			if fsRes.err != nil && fsRes.forJoin {
 				log.Printf(red("Could not join network. Err: %v"), fsRes.err)
-				chord.JoinChan <- joinNode // retry connection (by putting value on join chan)
 			} else {
-				//log.Printf(green("Our successor: %v:%v"), fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp)
+				log.Printf(green("Our successor: %v:%v"), fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp)
 				chord.successor = fsRes.ret.SuccessorId
 				chord.finger[0] = chord.successor
+				chord.successors[0] = chord.successor
 				addToRing(fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp, chord.ringMap)
 				notifyReq := &pb.NotifyArgs{PredecessorId: myID, PredecessorIp: myIP}
-				go chord.ringMap[chord.successor].conn.NotifyRPC(context.Background(), notifyReq)
+				if _, ok := chord.ringMap[chord.successor]; ok && chord.successor != chord.ID { // Issue if one of the nodes dies
+					go chord.ringMap[chord.successor].conn.NotifyRPC(context.Background(), notifyReq)
+				}
 			}
 
 		// We received fix fingers response back from ourselves
@@ -471,8 +483,26 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		// We received ping from a node behind us asking us for our predecessor's id
 		case ping := <-chord.PingFromPredecessorChan:
 			//log.Printf("Ping from node behind us in the ring. Responding: %v:%v", chord.predecessor, chord.ringMap[chord.predecessor].IP)
+			// Send our successor list from our successor to the end. This will need to be encoded as:
+			// ID:IP-ID2:IP2...
+			successorList := ""
+			if chord.successors[0] != chord.ID { // don't bother to send if we don't have useful info
+				for i := 0; i < R-1; i++ {
+					var ip string
+					ip = ""
+					succ := chord.successors[i]
+					if mapSucc, ok := chord.ringMap[succ]; ok {
+						ip = mapSucc.IP
+					}
+					successorList += fmt.Sprintf("%v:%v", succ, ip)
+					if i != R-2 {
+						successorList += "-"
+					}
+				}
+			}
+
 			ping.response <- pb.PingSuccessorRet{PredecessorId: chord.predecessor,
-				PredecessorIp: chord.ringMap[chord.predecessor].IP}
+				PredecessorIp: chord.ringMap[chord.predecessor].IP, SuccessorList: successorList}
 
 		// We received a response from a predecessor to whom we moved a file
 		case mfr := <-chord.moveFileResponseChan:
@@ -500,12 +530,33 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		case pr := <-chord.pingSuccessorResponseChan:
 			if pr.err != nil {
 				log.Printf(red("Failed to ping our successor!"))
+				if joinNode != "" {
+					chord.JoinChan <- joinNode // TODO this is an issue with if the main fails
+				}
 			} else {
 				if between(pr.ret.PredecessorId, chord.ID, chord.successor, false) {
 					//log.Printf("Updating successor: %v:%v", pr.ret.PredecessorId, pr.ret.PredecessorIp)
 					chord.successor = pr.ret.PredecessorId
 					chord.finger[0] = chord.successor
+					chord.successors[0] = chord.successor
 					addToRing(pr.ret.PredecessorId, pr.ret.PredecessorIp, chord.ringMap)
+				}
+
+				// Split the string we recieved and append ips to our ring map if they are not there
+				// and write the entries to our successor list
+				if pr.ret.SuccessorList != "" {
+					ss := strings.Split(pr.ret.SuccessorList, "-")
+					for i, node := range ss {
+						s := strings.Split(node, ":")
+						succID, err := strconv.ParseUint(s[0], 10, 64)
+						if err != nil {
+							continue
+						}
+						if _, ok := chord.ringMap[succID]; !ok { // not in our ring map, add to it
+							addToRing(succID, s[1], chord.ringMap)
+						}
+						chord.successors[i+1] = succID
+					}
 				}
 				notifyReq := &pb.NotifyArgs{PredecessorId: myID, PredecessorIp: myIP}
 				go chord.ringMap[chord.successor].conn.NotifyRPC(context.Background(), notifyReq)

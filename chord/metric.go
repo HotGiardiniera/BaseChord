@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// REQUSTMETRIC signifys the metric type for our JSON output
 const REQUSTMETRIC = 1
 
 // METRICSFILE represents where we will write our JSON metrics

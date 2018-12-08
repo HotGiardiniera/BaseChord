@@ -15,6 +15,9 @@ import (
 // M is our max number of nodes on our ring
 const M = 7
 
+// R is the size of our successor list
+const R = 4
+
 func main() {
 	// Argument parsing
 	var clientPort int

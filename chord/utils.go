@@ -137,6 +137,14 @@ func fingertoString(id uint64, ft *[M]uint64) string {
 	return retString
 }
 
+func successorsToString(id uint64, ft *[R]uint64) string {
+	retString := "|------|\n"
+	for i := 0; i < R; i++ {
+		retString += fmt.Sprintf("|%-6v|\n", ft[i])
+	}
+	return retString
+}
+
 /* ********************  Debug Printing ******************** */
 func (kord Chord) String() string {
 	retString := fmt.Sprintf("\n---------------------- Node %v ----------------------\nID: %v\nIP: %s\n",
@@ -145,10 +153,12 @@ func (kord Chord) String() string {
 	retString += fmt.Sprintf("Predecessor: %v\n", kord.predecessor)
 	// Finger table
 	retString += fmt.Sprintf("Finger_table:\n%v", fingertoString(kord.ID, &kord.finger))
-	// Node File system
+	// Successors table
+	retString += fmt.Sprintf("Successor_list:\n%v", successorsToString(kord.ID, &kord.successors))
 	return retString
 }
 
+// PrintFS takes our filesystem and prints each file
 func PrintFS(fs map[string]string) {
 	retString := "\n|------FileName------|-----Data-----\n"
 	for key, value := range fs {
