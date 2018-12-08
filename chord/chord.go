@@ -63,6 +63,7 @@ type Chord struct {
 	finger              [M]uint64
 	successors          [R]uint64
 	next                uint64
+	successorNext       uint64
 	fixedFingersCounter uint64
 	// Request channels
 	JoinChan                chan string
@@ -222,7 +223,7 @@ func (kord *Chord) ClosestPrecedingInternal(id uint64) uint64 {
 //about us
 func (kord *Chord) StabilizeInternal(successor pb.ChordClient) {
 	pingReq := &pb.PingSuccessorArgs{}
-	log.Printf("Asking our successor for its predecessor.")
+	//log.Printf("Asking our successor for its predecessor.")
 	ret, err := successor.PingSuccessorRPC(context.Background(), pingReq)
 	kord.pingSuccessorResponseChan <- PingSuccessorResponse{ret: ret, err: err}
 }
@@ -241,12 +242,12 @@ func (kord *Chord) FixFingersInternal() {
 // FindSuccessorInternal implements find successor at our node
 func (kord *Chord) FindSuccessorInternal(id uint64, jumpCount uint32) *pb.FindSuccessorRet {
 	if between(id, kord.ID, kord.successor, true) {
-		log.Printf("Successor found: %v:%v", kord.successor, kord.ringMap[kord.successor].IP)
+		//log.Printf("Successor found: %v:%v", kord.successor, kord.ringMap[kord.successor].IP)
 		return &pb.FindSuccessorRet{SuccessorId: kord.successor, SuccessorIp: kord.ringMap[kord.successor].IP,
 			FinalDest: kord.successor, Jumps: jumpCount}
 	}
 	closest := kord.ClosestPrecedingInternal(id)
-	log.Printf("Successor found: %v:%v", closest, kord.ringMap[closest].IP)
+	//log.Printf("Successor found: %v:%v", closest, kord.ringMap[closest].IP)
 	if closest == kord.ID { // Edge case if we are restablizing the network
 		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP,
 			FinalDest: closest}
@@ -362,6 +363,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		finger:                      fTable,
 		successors:                  successorList,
 		next:                        0,
+		successorNext:               0,
 		fixedFingersCounter:         0,
 		JoinChan:                    make(chan string, 1),
 		FindSuccessorChan:           make(chan FindSuccessorRequest),
@@ -530,8 +532,9 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		case pr := <-chord.pingSuccessorResponseChan:
 			if pr.err != nil {
 				log.Printf(red("Failed to ping our successor!"))
-				if joinNode != "" {
-					chord.JoinChan <- joinNode // TODO this is an issue with if the main fails
+				if nextID := chord.successors[chord.successorNext]; nextID != chord.ID {
+					chord.successor = nextID
+					chord.successorNext = (chord.successorNext + 1) % R
 				}
 			} else {
 				if between(pr.ret.PredecessorId, chord.ID, chord.successor, false) {
