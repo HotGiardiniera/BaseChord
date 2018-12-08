@@ -499,7 +499,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		//(This is part of the stabilize protocol)
 		case pr := <-chord.pingSuccessorResponseChan:
 			if pr.err != nil {
-				log.Printf(cyan("Failed to ping our successor!"))  
+				log.Printf(red("Failed to ping our successor!"))
 			} else {
 				if between(pr.ret.PredecessorId, chord.ID, chord.successor, false) {
 					//log.Printf("Updating successor: %v:%v", pr.ret.PredecessorId, pr.ret.PredecessorIp)
