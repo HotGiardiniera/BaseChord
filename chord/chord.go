@@ -278,7 +278,7 @@ func (kord *Chord) NotifyInternal(id uint64, ip string, fs *FileSystem) *pb.Noti
 		if kord.ID == kord.successor {
 			kord.successor = kord.predecessor
 			kord.successors[0] = kord.predecessor
-            kord.successorNext = 0
+			kord.successorNext = 0
 			restartTimer(kord.stabilizeTimer, StabilizeTimeout)
 		}
 		// Pass any files that need to be
@@ -452,7 +452,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				chord.successor = fsRes.ret.SuccessorId
 				chord.finger[0] = chord.successor
 				chord.successors[0] = chord.successor
-                chord.successorNext = 0
+				chord.successorNext = 0
 				addToRing(fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp, chord.ringMap)
 				notifyReq := &pb.NotifyArgs{PredecessorId: myID, PredecessorIp: myIP}
 				if _, ok := chord.ringMap[chord.successor]; ok && chord.successor != chord.ID { // Issue if one of the nodes dies
@@ -497,7 +497,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 					succ := chord.successors[i]
 					if mapSucc, ok := chord.ringMap[succ]; ok { // Don't send if I can't provide an IP
 						ip = mapSucc.IP
-                        successorList += fmt.Sprintf("%v$%v-", succ, ip)
+						successorList += fmt.Sprintf("%v$%v-", succ, ip)
 					}
 				}
 			}
@@ -534,7 +534,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				if nextID := chord.successors[chord.successorNext]; nextID != chord.ID {
 					chord.successor = nextID
 				}
-                chord.successorNext = (chord.successorNext + 1) % R
+				chord.successorNext = (chord.successorNext + 1) % R
 			} else {
 				if between(pr.ret.PredecessorId, chord.ID, chord.successor, false) {
 					//log.Printf("Updating successor: %v:%v", pr.ret.PredecessorId, pr.ret.PredecessorIp)
@@ -542,15 +542,15 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 					chord.finger[0] = chord.successor
 					addToRing(pr.ret.PredecessorId, pr.ret.PredecessorIp, chord.ringMap)
 				}
-                // Just set our successor list if we get a positive response from a successor
-                chord.successors[0] = chord.successor
-                chord.successorNext = 0
+				// Just set our successor list if we get a positive response from a successor
+				chord.successors[0] = chord.successor
+				chord.successorNext = 0
 
 				// Split the string we recieved and append ips to our ring map if they are not there
 				// and write the entries to our successor list
 				if pr.ret.SuccessorList != "" {
 					ss := strings.Split(pr.ret.SuccessorList, "-")
-                    log.Printf(magenta("Successor list sent to append %v"), pr.ret.SuccessorList)
+					log.Printf(magenta("Successor list sent to append %v"), pr.ret.SuccessorList)
 					for i, node := range ss {
 						s := strings.Split(node, "$")
 						succID, err := strconv.ParseUint(s[0], 10, 64)
