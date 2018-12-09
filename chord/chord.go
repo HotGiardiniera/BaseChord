@@ -245,8 +245,8 @@ func (kord *Chord) FindSuccessorInternal(id uint64, jumpCount uint32) *pb.FindSu
 	closest := kord.ClosestPrecedingInternal(id)
 	log.Printf("Successor found: %v:%v", closest, kord.ringMap[closest].IP)
 	if closest == kord.ID { // Edge case if we are restablizing the network
-		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP, 
-            FinalDest: closest}
+		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP,
+			FinalDest: closest}
 	}
 	// Make the RPC call to our n` closest node
 	ret, fsErr := kord.ringMap[closest].conn.FindSuccessorRPC(context.Background(), &pb.FindSuccessorArgs{Id: id, Jumps: jumpCount + 1})
@@ -254,8 +254,8 @@ func (kord *Chord) FindSuccessorInternal(id uint64, jumpCount uint32) *pb.FindSu
 		log.Printf(red("Could not probe successor"))
 		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP, Jumps: jumpCount}
 	}
-	return &pb.FindSuccessorRet{SuccessorId: ret.SuccessorId, SuccessorIp: ret.SuccessorIp, Jumps: ret.Jumps, 
-        FinalDest:ret.SuccessorId}
+	return &pb.FindSuccessorRet{SuccessorId: ret.SuccessorId, SuccessorIp: ret.SuccessorIp, Jumps: ret.Jumps,
+		FinalDest: ret.SuccessorId}
 
 }
 
@@ -315,7 +315,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 	debugPrintChan := make(chan string, 1)
 
 	// Metric writer channel
-	metricWriteChan := make(chan RequestMetric, 1000)
+	metricWriteChan := make(chan Metric, 1000)
 
 	// This is a fresh run of chord so delete an existing metrics file
 	filename := fmt.Sprintf(METRICSFILE, myID)
@@ -448,8 +448,11 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		case ff := <-chord.fixFingersResponseChan:
 			// Check if we need to update our finger table entry
 			if chord.finger[ff.nextID] != ff.ret.SuccessorId {
+				log.Printf(magenta("Fixing finger index %v: %v --> %v"), ff.nextID, chord.finger[ff.nextID], ff.ret.SuccessorId)
 				chord.finger[ff.nextID] = ff.ret.SuccessorId
 				chord.fixedFingersCounter++
+				metricWriteChan <- FingerMetric{Class: FINGERMETRIC, SourceNode: chord.ID,
+					FixedFingers: chord.fixedFingersCounter}
 			}
 			addToRing(ff.ret.SuccessorId, ff.ret.SuccessorIp, chord.ringMap)
 
