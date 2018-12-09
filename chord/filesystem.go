@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"strconv"
 
 	context "golang.org/x/net/context"
 
@@ -74,7 +75,7 @@ func (fs *FileSystem) GetInternal(file string) pb.Result {
 //thread of execution and hence does not handle race conditions.
 func (fs *FileSystem) StoreInternal(f string, d *pb.Data) pb.Result {
 	log.Printf(yellow("attempting to store %s at %s"), f, d.Data)
-	fs.fileSystem[f] = d.Data
+	fs.fileSystem[f] = strconv.FormatUint(generateIDFromIP(d.Data), 10)
 	return pb.Result{Result: &pb.Result_Success{Success: &pb.Success{}}}
 }
 
@@ -92,11 +93,16 @@ func (fs *FileSystem) DeleteInternal(f string) pb.Result {
 // MoveInternal : Used internally to flag any files that should be passed to a
 //predecessor
 func (fs *FileSystem) MoveInternal(myID, predecessorID uint64) map[string]string {
-	var fileHash uint64
 	var filesToMove map[string]string
+	filesToMove = make(map[string]string)
+	var dataToCompare uint64
 	for name, data := range fs.fileSystem {
-		fileHash = generateIDFromIP(name)
-		if between(fileHash, predecessorID, myID, false) { // do not want inclusive range
+		log.Printf("Looking if we should move file %v-%v to %v", name, data, predecessorID)
+		dataToCompare, _ = strconv.ParseUint(data, 10, 64)
+		// If file hashed key is less than predecessorID, makre file for
+		//move to our predecessor
+		if dataToCompare < predecessorID && predecessorID < myID {
+			log.Printf(red("Yes we should!"))
 			filesToMove[name] = data
 		}
 	}
