@@ -80,6 +80,8 @@ message Command {
 message FindSuccessorArgs {
     uint64 id = 1;
     uint32 jumps = 2;  //This is used to track if FindSuccessor request came from previous node.
+    repeated uint64 fingers = 3; // This will be used to pass finger tables on piggybacks
+    uint64 senderID = 4; // This is ID for node that sent their finger table over
 }
 
 // Output from FindSuccessor

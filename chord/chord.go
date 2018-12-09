@@ -61,6 +61,7 @@ type Chord struct {
 	finger              [M]uint64
 	next                uint64
 	fixedFingersCounter uint64
+	enablePiggyBack     bool
 	// Request channels
 	JoinChan                chan string
 	FindSuccessorChan       chan FindSuccessorRequest
@@ -227,6 +228,10 @@ func (kord *Chord) StabilizeInternal(successor pb.ChordClient) {
 // FixFingersInternal is called periodically (with stabilize); Refreshes finger table
 func (kord *Chord) FixFingersInternal() {
 	kord.next = (kord.next + 1) % M
+	// Enable piggy backs once entire finger table has been fixed
+	if kord.next == 0 {
+		kord.enablePiggyBack = true
+	}
 	nextEntry := (kord.ID + PowTwo(kord.next)) % PowTwo(M)
 	log.Printf("Looking for successor of finger table index %v. Finding successor for key %v", kord.next+1, nextEntry)
 	go func(_nextId, _nextEntry uint64) {
@@ -248,8 +253,13 @@ func (kord *Chord) FindSuccessorInternal(id uint64, jumpCount uint32) *pb.FindSu
 		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP,
 			FinalDest: closest}
 	}
-	// Make the RPC call to our n` closest node
-	ret, fsErr := kord.ringMap[closest].conn.FindSuccessorRPC(context.Background(), &pb.FindSuccessorArgs{Id: id, Jumps: jumpCount + 1})
+	// Make the RPC call to our nth closest node
+	piggyBackFingers := []
+	if kord.enablePiggyBack {
+		piggyBackFingers = kord.fingers[:]
+	}
+	ret, fsErr := kord.ringMap[closest].conn.FindSuccessorRPC(context.Background(),
+		&pb.FindSuccessorArgs{Id: id, Jumps: jumpCount + 1, Fingers: piggyBackFingers, SenderID: kord.ID})
 	if fsErr != nil {
 		log.Printf(red("Could not probe successor"))
 		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP, Jumps: jumpCount}
@@ -278,10 +288,10 @@ func (kord *Chord) NotifyInternal(id uint64, ip string, fs *FileSystem) *pb.Noti
 		// Pass any files that need to be
 		filesToPass := fs.MoveInternal(kord.ID, id)
 		for name, data := range filesToPass {
+			log.Printf(red("Deleting file %v-%v since it'll be moved to predecessor"), _fileName, _fileData)
+			fs.C <- InputChannelType{command: pb.Command{Operation: pb.Op_DELETE, Arg: &pb.Command_Delete{Delete: &pb.FileDelete{Name: _fileName}}},
+				response: make(chan pb.Result)}
 			go func(predecessor pb.ChordClient, predID uint64, _fileName, _fileData string) {
-				log.Printf(red("Deleting file %v-%v since it'll be moved to predecessor"), _fileName, _fileData)
-				fs.C <- InputChannelType{command: pb.Command{Operation: pb.Op_DELETE, Arg: &pb.Command_Delete{Delete: &pb.FileDelete{Name: _fileName}}},
-					response: make(chan pb.Result)}
 				log.Printf(cyan("Moving file %v-%v to our new predecessor %v"), _fileName, _fileData, predID)
 				res, err := predecessor.MoveFileRPC(context.Background(), &pb.MoveFileArgs{Name: _fileName, Data: _fileData})
 				kord.moveFileResponseChan <- MoveFileResponse{ret: res, err: err, predecessorID: predID, fileName: _fileName, fileData: _fileData}
@@ -359,6 +369,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		finger:                      fTable,
 		next:                        0,
 		fixedFingersCounter:         0,
+		enablePiggyBack:             false,
 		JoinChan:                    make(chan string, 1),
 		FindSuccessorChan:           make(chan FindSuccessorRequest),
 		NotifyChan:                  make(chan NotifyRequest),
@@ -394,11 +405,11 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 			// If we are not connected to the ring yet, defer this command until later
 			if chord.successor == myID || chord.predecessor == myID {
 				log.Printf("Not connected to ring yet. Deferring command to later")
-				//fs.C <- op
-				op.response <- pb.Result{Result: &pb.Result_NotFound{NotFound: &pb.FileNotFound{}}} // Default file not found for now. TODO remove
-
+				fs.C <- op
+				// op.response <- pb.Result{Result: &pb.Result_NotFound{NotFound: &pb.FileNotFound{}}} // Default file not found for now. TODO remove
 			} else {
-				// Determine where this bad boy needs to go
+				// Determine where this bad boy needs to go:
+				//First get file name to hash it
 				var file string
 				switch c := op.command; c.Operation {
 				case pb.Op_GET:
@@ -412,16 +423,16 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				}
 
 				if file != "" {
-					// Get find the closest successor to the arg
+					// Find the closest successor to the file's hash
 					location := generateIDFromIP(file)
-					log.Printf(yellow("ring location: %v"), location)
+					log.Printf(yellow("Hashed file name: %v"), location)
 					startTime := JSONTime(time.Now())
 					node := chord.FindSuccessorInternal(location, 0)
 					endTime := JSONTime(time.Now())
 					// If we are the closest node we can execute the command, otherwise forward to the node where this file should
 					if node.SuccessorId == chord.ID {
 						fs.HandleCommand(op)
-					} else { // respond with a  forward
+					} else { // respond with a forward
 						op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: node.SuccessorIp}}}
 						// TODO `DestNode` needs to come from the RPC response
 						metricWriteChan <- RequestMetric{Class: REQUSTMETRIC, SourceNode: chord.ID,
@@ -465,6 +476,13 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		// We received find successor request
 		case fsReq := <-chord.FindSuccessorChan:
 			//log.Printf(cyan("We received request to find successor for key %v"), fsReq.arg.Id)
+			// Look at finger table that was piggy backed and use it to fix our fingers
+			if chord.enablePiggyBack && len(fsReq.arg.Fingers) > 0 {
+				piggyBackIndex := -1
+				for ourIndex := 0; ourIndex < M - 1; ourIndex++ {
+					if between()
+				}
+			}
 			fsReq.response <- *(chord.FindSuccessorInternal(fsReq.arg.Id, fsReq.arg.Jumps))
 
 		// We received notification from node that believes it's our predecessor
