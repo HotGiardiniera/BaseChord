@@ -279,9 +279,6 @@ func (kord *Chord) NotifyInternal(id uint64, ip string, fs *FileSystem) *pb.Noti
 		filesToPass := fs.MoveInternal(kord.ID, id)
 		for name, data := range filesToPass {
 			go func(predecessor pb.ChordClient, predID uint64, _fileName, _fileData string) {
-				log.Printf(red("Deleting file %v-%v since it'll be moved to predecessor"), _fileName, _fileData)
-				fs.C <- InputChannelType{command: pb.Command{Operation: pb.Op_DELETE, Arg: &pb.Command_Delete{Delete: &pb.FileDelete{Name: _fileName}}},
-					response: make(chan pb.Result)}
 				log.Printf(cyan("Moving file %v-%v to our new predecessor %v"), _fileName, _fileData, predID)
 				res, err := predecessor.MoveFileRPC(context.Background(), &pb.MoveFileArgs{Name: _fileName, Data: _fileData})
 				kord.moveFileResponseChan <- MoveFileResponse{ret: res, err: err, predecessorID: predID, fileName: _fileName, fileData: _fileData}
@@ -297,17 +294,6 @@ func (kord *Chord) NotifyInternal(id uint64, ip string, fs *FileSystem) *pb.Noti
 func (kord *Chord) PingPredecessorInternal(predecessor pb.ChordClient) {
 	ret, err := predecessor.PingPredecessorRPC(context.Background(), &pb.PingPredecessorArgs{})
 	kord.pingPredecessorResponseChan <- PingPredecessorResponse{ret: ret, err: err}
-}
-
-// MoveFileInternal handles the storing of any files that were sent to us our
-//predecessor when we joined the ring
-func (kord *Chord) MoveFileInternal(movedFile *pb.MoveFileArgs, fs *FileSystem) pb.MoveFileRet {
-	go func(fileName string, fileData string) {
-		fs.C <- InputChannelType{command: pb.Command{Operation: pb.Op_STORE,
-			Arg: &pb.Command_Store{Store: &pb.FileStore{Name: fileName, Data: &pb.Data{Data: fileData}}}},
-			response: make(chan pb.Result)}
-	}(movedFile.Name, movedFile.Data)
-	return pb.MoveFileRet{Success: true}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -434,7 +420,8 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		// We received a file from our successor after we joined the network
 		case mf := <-chord.MoveFileChan:
 			log.Printf(cyan("Received request from our successor to store file %v-%v"), mf.arg.Name, mf.arg.Data)
-			mf.response <- chord.MoveFileInternal(mf.arg, fs)
+			fs.StoreInternal(mf.arg.Name, &pb.Data{Data: mf.arg.Data})
+			mf.response <- pb.MoveFileRet{Success: true}
 
 		// Find successor has returned result
 		case fsRes := <-chord.findSuccessorResponseChan:
@@ -492,8 +479,11 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 					res, err := predecessor.MoveFileRPC(context.Background(), &pb.MoveFileArgs{Name: fileName, Data: fileData})
 					chord.moveFileResponseChan <- MoveFileResponse{ret: res, err: err, predecessorID: predID, fileName: fileName, fileData: fileData}
 				}(chord.ringMap[mfr.predecessorID].conn, mfr.predecessorID, mfr.fileName, mfr.fileData)
+			} else {
+				log.Printf(cyan("Moving file %v to node %v succeded."), mfr.fileName, mfr.predecessorID)
+				log.Printf(red("Deleting file %v-%v since it'll be moved to predecessor"), mfr.fileName, mfr.fileData)
+				fs.DeleteInternal(mfr.fileName)
 			}
-			log.Printf(cyan("Moving file %v to node %v succeded."), mfr.fileName, mfr.predecessorID)
 
 		// We received a response from pinging our precedessor
 		case pr := <-chord.pingPredecessorResponseChan:
