@@ -74,8 +74,9 @@ func (fs *FileSystem) GetInternal(file string) pb.Result {
 //function assumes that it is called from a single
 //thread of execution and hence does not handle race conditions.
 func (fs *FileSystem) StoreInternal(f string, d *pb.Data) pb.Result {
-	log.Printf(yellow("attempting to store %s at %s"), f, d.Data)
-	fs.fileSystem[f] = strconv.FormatUint(generateIDFromIP(d.Data), 10)
+	hashedData := strconv.FormatUint(generateIDFromIP(f), 10)
+	log.Printf(yellow("Attempting to store %s at %s"), f, hashedData)
+	fs.fileSystem[f] = hashedData
 	return pb.Result{Result: &pb.Result_Success{Success: &pb.Success{}}}
 }
 
