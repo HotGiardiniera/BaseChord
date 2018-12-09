@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	// "math/rand"
+	// "time"
+
 	context "golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -144,11 +147,104 @@ func Delete(fs pb.FileSystemClient, fileName, Server string) {
 	}
 }
 
+//TODO make random filename generator
+
+//------------------------------- LOCAL TESTS --------------------------------//
+func exercise_local(portString string) {
+	files := make([]string, 100) // Will hash nearish to each other
+	for i := 0; i < 100; i++ {
+		files[i] = fmt.Sprintf("File%v", i)
+	}
+
+	ports := strings.Split(portString, ",")
+	// First store all files
+	endpoint := fmt.Sprintf("stretch:3%03v", ports[0])
+
+	log.Printf("%v\n", endpoint)
+
+	fs := Connect(endpoint)
+
+	for _, file := range files {
+		Store(fs, file, endpoint)
+	}
+
+	for _, port := range ports[1:] {
+		endpoint = fmt.Sprintf("stretch:3%03v", port)
+		fs = Connect(endpoint)
+		for _, file := range files {
+			Get(fs, file, endpoint)
+		}
+	}
+
+}
+
+//----------------------------------------------------------------------------//
+//-------------------------------- KUBE TESTS --------------------------------//
+
+func exercise_kube(numPods int) {
+	files := make([]string, 100) // Will hash nearish to each other
+	for i := 0; i < 100; i++ {
+		files[i] = fmt.Sprintf("File%v", i)
+	}
+
+	config, err := clientcmd.BuildConfigFromFlags("", "/home/vagrant/.kube/config")
+	if err != nil {
+		panic(err.Error())
+	}
+	// creates the clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		panic(err.Error())
+	}
+	pods, err := clientset.CoreV1().Pods("").List(metav1.ListOptions{})
+	if err != nil {
+		panic(err.Error())
+	}
+
+	var server string
+	servers := make([]string, numPods)
+	for _, pod := range pods.Items {
+		if strings.Contains(pod.Name, "chord"){
+			server = pod.Status.PodIP + ":3000"
+			servers = append(servers, server)
+		}	
+	}
+
+
+	log.Printf("Storing files at %v", servers[0])
+	fs := Connect(servers[0])
+
+	for _, file := range files {
+		Store(fs, file, servers[0])
+	}
+
+	for _, server := range servers[1:] {
+		log.Printf("Connecting to %v", server)
+		fs = Connect(server)
+		for _, file := range files {
+			Get(fs, file, server)
+		}
+	}
+
+}
+
+//----------------------------------------------------------------------------//
+
 func main() {
 	// Take endpoint as input
 	var call string
 	var fileName string
+	var localPorts string
+
+	//Local exercising
 	var endpoint string
+	flag.StringVar(&localPorts, "local_ports", "", "comma separated list of client ports, 1,2,3,4. If active will ignore any other flags")
+
+	//Kube exercising
+	var kube bool
+	var numPods int
+	flag.BoolVar(&kube, "kube", false, "Store/Get 100 files from kube")
+	flag.IntVar(&numPods, "pods", 0, "Number of kubernetes pods")
 
 	flag.StringVar(&endpoint, "endpoint", "127.0.0.1:3000", "Client endpoint")
 	flag.StringVar(&call, "call", "", "Choose single functions to run or OG main")
@@ -157,6 +253,14 @@ func main() {
 
 	// Create a FileSystem client
 	fs := Connect(endpoint)
+
+	if localPorts != "" {
+		exercise_local(localPorts)
+		return
+	} else if kube {
+		exercise_kube(numPods)
+		return
+	}
 
 	var fnc func(pb.FileSystemClient, string, string)
 
