@@ -19,7 +19,7 @@ def print_ring_basic(node_list):
     node_list.sort()
     dumb_ring = "-->"
     for i in node_list:
-        dumb_ring += (str(i)+"--")
+        dumb_ring += ("\u001b[36m"+str(i)+"\u001b[0m"+"--")
     print(dumb_ring+">")
 
 def get_stats(file_data, node_id):
@@ -35,16 +35,17 @@ def get_stats(file_data, node_id):
 
     total_hops = 0
     misses = 0 # requests we needed to forward
-    for request in classes[REQUST_CLASS]:
-        # print(request)
-        total_hops += request['Hops']
-        misses += 1
-    print("\n----------------------------")
-    print("Node: ", node_id)
-    print("Total Hops:", total_hops)
-    print("Total Forwards:", misses)
-    print("Hops per forward:", (total_hops/misses))
-    print()
+    if classes.get(REQUST_CLASS):
+        for request in classes[REQUST_CLASS]:
+            # print(request)
+            total_hops += request['Hops']
+            misses += 1
+        print("\n----------------------------")
+        print("Node: ", node_id)
+        print("Total Hops:", total_hops)
+        print("Total Forwards:", misses)
+        print("Hops per forward:", (total_hops/misses))
+        print()
 
 
 def main():
@@ -66,7 +67,7 @@ def main():
                 data = json.loads(line)
                 file_data.append(data)
             get_stats(file_data, node_ids[-1])
-    # print_ring_basic(node_ids)
+    print_ring_basic(node_ids)
 
 
 
