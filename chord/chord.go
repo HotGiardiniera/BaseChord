@@ -455,9 +455,8 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				chord.successorNext = 0
 				addToRing(fsRes.ret.SuccessorId, fsRes.ret.SuccessorIp, chord.ringMap)
 				notifyReq := &pb.NotifyArgs{PredecessorId: myID, PredecessorIp: myIP}
-				if _, ok := chord.ringMap[chord.successor]; ok && chord.successor != chord.ID { // Issue if one of the nodes dies
-					go chord.ringMap[chord.successor].conn.NotifyRPC(context.Background(), notifyReq)
-				}
+                go chord.ringMap[chord.successor].conn.NotifyRPC(context.Background(), notifyReq)
+
 			}
 
 		// We received fix fingers response back from ourselves
@@ -531,9 +530,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		case pr := <-chord.pingSuccessorResponseChan:
 			if pr.err != nil {
 				log.Printf(red("Failed to ping our successor!"))
-				if nextID := chord.successors[chord.successorNext]; nextID != chord.ID {
-					chord.successor = nextID
-				}
+				chord.successor = chord.successors[chord.successorNext]
 				chord.successorNext = (chord.successorNext + 1) % R
 			} else {
 				if between(pr.ret.PredecessorId, chord.ID, chord.successor, false) {
