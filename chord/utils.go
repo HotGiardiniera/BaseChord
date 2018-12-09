@@ -19,6 +19,10 @@ const PingTimeout = 2000
 // StabilizeTimeout -> milliseconds to run stabilize
 const StabilizeTimeout = 2000
 
+// StabilizeTimeoutSlowDown -> milliseconds to run stabilize more slowly after
+// all fingers have been fixed
+const StabilizeTimeoutSlowDown = 5000
+
 // MetricsTimeout -> milliseconds to run our metric writer
 const MetricsTimeout = 6000
 
@@ -97,6 +101,15 @@ func restartTimer(timer *time.Timer, timeout int64) {
 	timer.Reset(time.Duration(timeout) * time.Millisecond)
 }
 
+// Check if we should replace our finger table entry with this value
+func replaceFingerEntry(chordID, entry, currentEntry, candidateEntry uint64) bool {
+	fingOne := (chordID + PowTwo(entry)) % PowTwo(M)
+	fingTwo := (chordID + PowTwo(entry+1)) % PowTwo(M)
+	// log.Printf(magenta("Comparing fingers %v & %v: Is %v between %v-%v and less than %v?"),
+	// 	entry, entry+1, candidateEntry, fingOne, fingTwo, currentEntry)
+	return between(candidateEntry, fingOne, fingTwo, false) && candidateEntry < currentEntry
+}
+
 /* ********************  Color Printing ******************** */
 // All color printing functions act as wrappers around strings
 // and just insert ANSII escape sequences for colors.
@@ -138,6 +151,7 @@ func fingertoString(id uint64, ft *[M]uint64) string {
 }
 
 /* ********************  Debug Printing ******************** */
+// String is used our successor, predecessor, and finger table
 func (kord Chord) String() string {
 	retString := fmt.Sprintf("\n---------------------- Node %v ----------------------\nID: %v\nIP: %s\n",
 		kord.ID, kord.ID, kord.IP)
@@ -149,6 +163,7 @@ func (kord Chord) String() string {
 	return retString
 }
 
+// PrintFS prints out the files located at our node
 func PrintFS(fs map[string]string) {
 	retString := "\n|------FileName------|-----Data-----\n"
 	for key, value := range fs {

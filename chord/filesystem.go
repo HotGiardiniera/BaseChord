@@ -98,12 +98,10 @@ func (fs *FileSystem) MoveInternal(myID, predecessorID uint64) map[string]string
 	filesToMove = make(map[string]string)
 	var dataToCompare uint64
 	for name, data := range fs.fileSystem {
-		log.Printf("Looking if we should move file %v-%v to %v", name, data, predecessorID)
 		dataToCompare, _ = strconv.ParseUint(data, 10, 64)
 		// If file hashed key is less than predecessorID, makre file for
 		//move to our predecessor
 		if dataToCompare < predecessorID && predecessorID < myID {
-			log.Printf(red("Yes we should!"))
 			filesToMove[name] = data
 		}
 	}

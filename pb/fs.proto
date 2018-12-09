@@ -76,10 +76,17 @@ message Command {
     }
 }
 
+// FingerEntry to be passed in piggy back messages
+message FingerEntry {
+  uint64 id = 1;
+  string ip = 2;
+}
+
 // Input to FindSuccessor
 message FindSuccessorArgs {
     uint64 id = 1;
     uint32 jumps = 2;  //This is used to track if FindSuccessor request came from previous node.
+    repeated FingerEntry fingers = 3; // This will be used to pass finger tables on piggybacks
 }
 
 // Output from FindSuccessor
