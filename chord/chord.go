@@ -53,15 +53,15 @@ type RingNode struct {
 
 // Chord -> object that represets our Node on the ring abstractly
 type Chord struct {
-	ID                  uint64
-	IP                  string
-	successor           uint64
-	predecessor         uint64
-	ringMap             map[uint64]*RingNode
-	finger              [M]uint64
-	next                uint64
-	fixedFingersCounter uint64
-	enablePiggyBack     bool
+	ID                        uint64
+	IP                        string
+	successor                 uint64
+	predecessor               uint64
+	ringMap                   map[uint64]*RingNode
+	finger                    [M]uint64
+	next                      uint64
+	fixedFingersCounter       uint64
+	enablePiggyBackInternally bool
 	// Request channels
 	JoinChan                chan string
 	FindSuccessorChan       chan FindSuccessorRequest
@@ -76,9 +76,10 @@ type Chord struct {
 	fixFingersResponseChan      chan FindSuccessorResponse
 	moveFileResponseChan        chan MoveFileResponse
 	// Timers
-	pingTimer      *time.Timer
-	stabilizeTimer *time.Timer
-	metricsTimer   *time.Timer
+	pingTimer        *time.Timer
+	stabilizeTimeout int64
+	stabilizeTimer   *time.Timer
+	metricsTimer     *time.Timer
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -93,7 +94,7 @@ func RunChordServer(kord *Chord, port int) {
 	c, err := net.Listen("tcp", portString)
 	if err != nil {
 		// Note the use of Fatalf which will exit the program after reporting the error.
-		log.Fatalf("Could not create listening socket %v", err)
+		log.Fatalf(red("Could not create listening socket %v"), err)
 	}
 	// Create a new GRPC server
 	s := grpc.NewServer()
@@ -101,7 +102,7 @@ func RunChordServer(kord *Chord, port int) {
 	log.Printf("Going to listen on port %v", port)
 	// Start serving, this will block this function and only return when done.
 	if err := s.Serve(c); err != nil {
-		log.Fatalf("Failed to serve %v", err)
+		log.Fatalf(red("Failed to serve %v"), err)
 	}
 }
 
@@ -197,7 +198,7 @@ func (kord *Chord) JoinInternal(peerIP string) {
 	// Connect to other ring node
 	conn, err := connectToNode(peerIP)
 	if err != nil {
-		log.Printf("Could not connect to peer: %v", err)
+		log.Printf(red("Could not connect to peer: %v"), err)
 		kord.findSuccessorResponseChan <- FindSuccessorResponse{err: err, forJoin: true}
 	} else {
 		joinReq := &pb.FindSuccessorArgs{Id: kord.ID}
@@ -220,20 +221,22 @@ func (kord *Chord) ClosestPrecedingInternal(id uint64) uint64 {
 //about us
 func (kord *Chord) StabilizeInternal(successor pb.ChordClient) {
 	pingReq := &pb.PingSuccessorArgs{}
-	log.Printf("Asking our successor for its predecessor.")
+	// log.Printf("Asking our successor for its predecessor.")
 	ret, err := successor.PingSuccessorRPC(context.Background(), pingReq)
 	kord.pingSuccessorResponseChan <- PingSuccessorResponse{ret: ret, err: err}
 }
 
 // FixFingersInternal is called periodically (with stabilize); Refreshes finger table
-func (kord *Chord) FixFingersInternal() {
+func (kord *Chord) FixFingersInternal(enablePiggyBack bool) {
 	kord.next = (kord.next + 1) % M
 	// Enable piggy backs once entire finger table has been fixed
-	if kord.next == 0 {
-		kord.enablePiggyBack = true
+	if kord.next == 0 && !kord.enablePiggyBackInternally && enablePiggyBack {
+		log.Printf(magenta("Enabling message piggybacking!"))
+		kord.enablePiggyBackInternally = true && enablePiggyBack
+		kord.stabilizeTimeout = StabilizeTimeoutSlowDown
 	}
 	nextEntry := (kord.ID + PowTwo(kord.next)) % PowTwo(M)
-	log.Printf("Looking for successor of finger table index %v. Finding successor for key %v", kord.next+1, nextEntry)
+	// log.Printf("Looking for successor of finger table index %v. Finding successor for key %v", kord.next+1, nextEntry)
 	go func(_nextId, _nextEntry uint64) {
 		ret := kord.FindSuccessorInternal(_nextEntry, 0)
 		kord.fixFingersResponseChan <- FindSuccessorResponse{ret: ret, err: nil, forJoin: false, nextID: _nextId}
@@ -243,36 +246,39 @@ func (kord *Chord) FixFingersInternal() {
 // FindSuccessorInternal implements find successor at our node
 func (kord *Chord) FindSuccessorInternal(id uint64, jumpCount uint32) *pb.FindSuccessorRet {
 	if between(id, kord.ID, kord.successor, true) {
-		log.Printf("Successor found: %v:%v", kord.successor, kord.ringMap[kord.successor].IP)
+		// log.Printf("Successor found: %v:%v", kord.successor, kord.ringMap[kord.successor].IP)
 		return &pb.FindSuccessorRet{SuccessorId: kord.successor, SuccessorIp: kord.ringMap[kord.successor].IP,
 			FinalDest: kord.successor, Jumps: jumpCount}
 	}
 	closest := kord.ClosestPrecedingInternal(id)
-	log.Printf("Successor found: %v:%v", closest, kord.ringMap[closest].IP)
+	// log.Printf("Successor found: %v:%v", closest, kord.ringMap[closest].IP)
 	if closest == kord.ID { // Edge case if we are restablizing the network
 		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP,
 			FinalDest: closest}
 	}
 	// Make the RPC call to our nth closest node
-	piggyBackFingers := []
-	if kord.enablePiggyBack {
-		piggyBackFingers = kord.fingers[:]
+	piggyBackFingers := make([]*pb.FingerEntry, 0, M)
+	if kord.enablePiggyBackInternally {
+		piggyBackFingers = append(piggyBackFingers, &pb.FingerEntry{Id: kord.ID, Ip: kord.IP})
+		for _, f := range kord.finger {
+			piggyBackFingers = append(piggyBackFingers, &pb.FingerEntry{Id: f, Ip: kord.ringMap[f].IP})
+		}
 	}
 	ret, fsErr := kord.ringMap[closest].conn.FindSuccessorRPC(context.Background(),
-		&pb.FindSuccessorArgs{Id: id, Jumps: jumpCount + 1, Fingers: piggyBackFingers, SenderID: kord.ID})
+		&pb.FindSuccessorArgs{Id: id, Jumps: jumpCount + 1, Fingers: piggyBackFingers})
 	if fsErr != nil {
 		log.Printf(red("Could not probe successor"))
 		return &pb.FindSuccessorRet{SuccessorId: closest, SuccessorIp: kord.ringMap[closest].IP, Jumps: jumpCount}
 	}
 	return &pb.FindSuccessorRet{SuccessorId: ret.SuccessorId, SuccessorIp: ret.SuccessorIp, Jumps: ret.Jumps,
 		FinalDest: ret.SuccessorId}
-
 }
 
 // NotifyInternal implements the notify behavior at our Node
 func (kord *Chord) NotifyInternal(id uint64, ip string, fs *FileSystem) *pb.NotifyRet {
 	// Nothing to update: node that notified us is already our predecessor
 	if kord.predecessor == id {
+		kord.MoveFilesCheck(id, fs) // move any files to predecessor that belong to it
 		return &pb.NotifyRet{Updated: false}
 	}
 	// Node that notified us is indeed our predecessor
@@ -283,20 +289,10 @@ func (kord *Chord) NotifyInternal(id uint64, ip string, fs *FileSystem) *pb.Noti
 		restartTimer(kord.pingTimer, PingTimeout)
 		if kord.ID == kord.successor {
 			kord.successor = kord.predecessor
-			restartTimer(kord.stabilizeTimer, StabilizeTimeout)
+			restartTimer(kord.stabilizeTimer, kord.stabilizeTimeout)
 		}
-		// Pass any files that need to be
-		filesToPass := fs.MoveInternal(kord.ID, id)
-		for name, data := range filesToPass {
-			log.Printf(red("Deleting file %v-%v since it'll be moved to predecessor"), _fileName, _fileData)
-			fs.C <- InputChannelType{command: pb.Command{Operation: pb.Op_DELETE, Arg: &pb.Command_Delete{Delete: &pb.FileDelete{Name: _fileName}}},
-				response: make(chan pb.Result)}
-			go func(predecessor pb.ChordClient, predID uint64, _fileName, _fileData string) {
-				log.Printf(cyan("Moving file %v-%v to our new predecessor %v"), _fileName, _fileData, predID)
-				res, err := predecessor.MoveFileRPC(context.Background(), &pb.MoveFileArgs{Name: _fileName, Data: _fileData})
-				kord.moveFileResponseChan <- MoveFileResponse{ret: res, err: err, predecessorID: predID, fileName: _fileName, fileData: _fileData}
-			}(kord.ringMap[id].conn, id, name, data)
-		}
+		// Pass any files that belong to our new predecessor
+		kord.MoveFilesCheck(id, fs)
 		return &pb.NotifyRet{Updated: true}
 	}
 	// Node that notified us, is not our predecessor
@@ -309,11 +305,24 @@ func (kord *Chord) PingPredecessorInternal(predecessor pb.ChordClient) {
 	kord.pingPredecessorResponseChan <- PingPredecessorResponse{ret: ret, err: err}
 }
 
+// MoveFilesCheck queries file system to see if there are any files we need
+//to move to our predecessor
+func (kord *Chord) MoveFilesCheck(id uint64, fs *FileSystem) {
+	filesToPass := fs.MoveInternal(kord.ID, id)
+	for name, data := range filesToPass {
+		go func(predecessor pb.ChordClient, predID uint64, _fileName, _fileData string) {
+			log.Printf(cyan("Moving file %v-%v to our predecessor %v"), _fileName, _fileData, predID)
+			res, err := predecessor.MoveFileRPC(context.Background(), &pb.MoveFileArgs{Name: _fileName, Data: _fileData})
+			kord.moveFileResponseChan <- MoveFileResponse{ret: res, err: err, predecessorID: predID, fileName: _fileName, fileData: _fileData}
+		}(kord.ringMap[id].conn, id, name, data)
+	}
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 /* *********** Primary method for called by chord/main.go *********** */
 
-func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode string, debug bool) {
+func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode string, enablePiggyBack, debug bool) {
 	log.Printf("Chord ARGS: %v %v %v. Ring size 2^%v", myIP, myID, port, M)
 
 	// Channel that will only add/drain in debug mode
@@ -358,7 +367,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		finger:                      fTable,
 		next:                        0,
 		fixedFingersCounter:         0,
-		enablePiggyBack:             false,
+		enablePiggyBackInternally:   false,
 		JoinChan:                    make(chan string, 1),
 		FindSuccessorChan:           make(chan FindSuccessorRequest),
 		NotifyChan:                  make(chan NotifyRequest),
@@ -371,6 +380,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		fixFingersResponseChan:      make(chan FindSuccessorResponse),
 		moveFileResponseChan:        make(chan MoveFileResponse),
 		pingTimer:                   time.NewTimer(PingTimeout * time.Millisecond),
+		stabilizeTimeout:            StabilizeTimeout,
 		stabilizeTimer:              time.NewTimer(StabilizeTimeout * time.Millisecond),
 		metricsTimer:                time.NewTimer(MetricsTimeout * time.Millisecond)}
 
@@ -394,7 +404,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 			// If we are not connected to the ring yet, defer this command until later
 			if chord.successor == myID || chord.predecessor == myID {
 				log.Printf("Not connected to ring yet. Deferring command to later")
-				fs.C <- op
+				go func() { fs.C <- op }()
 				// op.response <- pb.Result{Result: &pb.Result_NotFound{NotFound: &pb.FileNotFound{}}} // Default file not found for now. TODO remove
 			} else {
 				// Determine where this bad boy needs to go:
@@ -467,10 +477,31 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 		case fsReq := <-chord.FindSuccessorChan:
 			//log.Printf(cyan("We received request to find successor for key %v"), fsReq.arg.Id)
 			// Look at finger table that was piggy backed and use it to fix our fingers
-			if chord.enablePiggyBack && len(fsReq.arg.Fingers) > 0 {
-				piggyBackIndex := -1
-				for ourIndex := 0; ourIndex < M - 1; ourIndex++ {
-					if between()
+			var replace bool
+			if chord.enablePiggyBackInternally && len(fsReq.arg.Fingers) > 0 {
+				for i := 0; i < M-1; i++ { // check entries 0 - M-2
+					for j := 0; j < len(fsReq.arg.Fingers); j++ {
+						replace = replaceFingerEntry(chord.ID, uint64(i), chord.finger[i], fsReq.arg.Fingers[j].Id)
+						if replace {
+							log.Printf(magenta("Updating finger entry %v from %v to %v (entry %v) based off of piggyback."), i+1, chord.finger[i], fsReq.arg.Fingers[j].Id, j)
+							addToRing(fsReq.arg.Fingers[j].Id, fsReq.arg.Fingers[j].Ip, chord.ringMap)
+							chord.finger[i] = fsReq.arg.Fingers[j].Id
+							break
+						}
+					}
+					if replace {
+						continue
+					}
+				}
+				// check M-1st entry of finger table
+				finalEntry := (chord.ID + PowTwo(M-1)) % PowTwo(M)
+				for j := 0; j < len(fsReq.arg.Fingers); j++ {
+					if between(fsReq.arg.Fingers[j].Id, finalEntry, chord.finger[M-1], false) {
+						log.Printf(magenta("Updating finger entry %v from %v to %v (entry %v) based off of piggyback."), M, chord.finger[M-1], fsReq.arg.Fingers[j].Id, j)
+						chord.finger[M-1] = fsReq.arg.Fingers[j].Id
+						addToRing(fsReq.arg.Fingers[j].Id, fsReq.arg.Fingers[j].Ip, chord.ringMap)
+						break
+					}
 				}
 			}
 			fsReq.response <- *(chord.FindSuccessorInternal(fsReq.arg.Id, fsReq.arg.Jumps))
@@ -502,7 +533,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				}(chord.ringMap[mfr.predecessorID].conn, mfr.predecessorID, mfr.fileName, mfr.fileData)
 			} else {
 				log.Printf(cyan("Moving file %v to node %v succeded."), mfr.fileName, mfr.predecessorID)
-				log.Printf(red("Deleting file %v-%v since it'll be moved to predecessor"), mfr.fileName, mfr.fileData)
+				log.Printf(yellow("Deleting file %v-%v since it'll be moved to predecessor"), mfr.fileName, mfr.fileData)
 				fs.DeleteInternal(mfr.fileName)
 			}
 
@@ -541,12 +572,12 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				//log.Printf("Running stabilize & fix fingers protocols...")
 				succ := chord.ringMap[chord.successor].conn
 				go chord.StabilizeInternal(succ)
-				chord.FixFingersInternal()
+				chord.FixFingersInternal(enablePiggyBack)
 				if !debug {
 					debugPrintChan <- "a"
 				}
 			}
-			restartTimer(chord.stabilizeTimer, StabilizeTimeout)
+			restartTimer(chord.stabilizeTimer, chord.stabilizeTimeout)
 
 		// Ping predecessor timer went off
 		case <-chord.pingTimer.C:

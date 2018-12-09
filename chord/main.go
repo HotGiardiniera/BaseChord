@@ -20,6 +20,7 @@ func main() {
 	var clientPort int
 	var chordPort int
 	var joinIP string // Start a chord node and join to it immediately
+	var enablePiggyBack bool
 
 	// Debug mode: this will force a node to assume it is joined in a ring of size 2
 	// This is mainly just to test RPCs. It will assume Node 1 is port 3001 and node 2 is 3003.
@@ -30,6 +31,8 @@ func main() {
 		"Port on which server should listen to client requests")
 	flag.IntVar(&chordPort, "chord", 3001,
 		"Port on which server should listen to Chord requests")
+	flag.BoolVar(&enablePiggyBack, "piggy", false,
+		"Enable finger table message piggy backing")
 	flag.BoolVar(&debug, "debug", false,
 		"Allows for debug printing mechanisms")
 	flag.StringVar(&joinIP, "join", "",
@@ -63,7 +66,7 @@ func main() {
 
 	// Initialize FileSystem
 	fileSystem := FileSystem{C: make(chan InputChannelType), fileSystem: make(map[string]string)}
-	go runChord(&fileSystem, ip, id, chordPort, joinIP, debug)
+	go runChord(&fileSystem, ip, id, chordPort, joinIP, enablePiggyBack, debug)
 
 	// Tell GRPC that fs will be serving requests for the fileSystem service and
 	//should use file system as struct whose methods should be called in response.
