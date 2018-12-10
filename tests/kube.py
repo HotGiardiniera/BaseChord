@@ -78,6 +78,8 @@ def boot_more(args):
         pod_spec['spec']['containers'][0]['ports'][1]['name']="%s-chord"%name
         chord_args = ['chord']
         chord_args += ['-join', peer0_node]
+        if args.piggyBack > 0:
+            chords_args += ['-enablePiggyBack', args.piggyBack]
         pod_spec['spec']['containers'][0]['command'] = chord_args
         service_spec =  spec_copy[1]
         # Create a service spec for this service
@@ -107,10 +109,12 @@ def boot(args):
             pod_spec['spec']['containers'][0]['ports'][0]['name']="%s-client"%name
             pod_spec['spec']['containers'][0]['ports'][1]['name']="%s-chord"%name
             # TODO autojoin peers
-            args = ['chord']
+            chord_args = ['chord']
             if i > 0:
-                args += ['-join', peer0_node]
-            pod_spec['spec']['containers'][0]['command'] = args
+                chord_args += ['-join', peer0_node]
+            if args.piggyBack > 0:
+                chord_args += ['-enablePiggyBack', args.piggyBack]
+            pod_spec['spec']['containers'][0]['command'] = chord_args
 
             service_spec =  spec_copy[1]
             # Create a service spec for this service
@@ -132,10 +136,12 @@ def main():
 
     run_parser = subparsers.add_parser("boot")
     run_parser.add_argument('nodes', type=int, default=3, help='How many chord nodes?')
+    run_parser.add_argument('piggyBack', type=int, default=0, help='Enable piggybacking?')
     run_parser.set_defaults(func = boot)
 
     run_parser = subparsers.add_parser("add")
     run_parser.add_argument('nodes', type=int, default=1, help='How many chord nodes to add to the ring?')
+    run_parser.add_argument('piggyBack', type=int, default=0, help='Enable piggybacking?')
     run_parser.set_defaults(func = boot_more)
 
     run_parser = subparsers.add_parser("kill")
