@@ -15,26 +15,28 @@ FINGER_CLASS = 2
 # FORMAT FOR PYTHON datetime.datetime.strptime(t1, "%Y-%m-%dT%H:%M:%S.%f")
 
 CHORD_IMAGE = "local-chord-node"
-LOGS_DIR = "./logs_no_add_16-50/"
+LOGS_DIR = "./logs/"
 
 def write_to_csv(info, node_list):
     with open('hops.csv'.format(), 'w') as f:
         for node in node_list:
             # Partition into hop
-            for req in info[node][REQUST_CLASS]:
-                start = datetime.datetime.strptime(req['Start'], "%Y-%m-%dT%H:%M:%S.%f")
-                end = datetime.datetime.strptime(req['End'], "%Y-%m-%dT%H:%M:%S.%f")
-                row = [req["Hops"], ((end-start).microseconds)/1000]
-                writer = csv.writer(f)
-                writer.writerow(row)
+            if info[node].get(REQUST_CLASS):
+                for req in info[node][REQUST_CLASS]:
+                    start = datetime.datetime.strptime(req['Start'], "%Y-%m-%dT%H:%M:%S.%f")
+                    end = datetime.datetime.strptime(req['End'], "%Y-%m-%dT%H:%M:%S.%f")
+                    row = [req["Hops"], ((end-start).microseconds)/1000]
+                    writer = csv.writer(f)
+                    writer.writerow(row)
     with open('fingers.csv'.format(), 'w') as f:
         for node in node_list:
             # Partition into hop
             # print(info[node][FINGER_CLASS])
-            for req in info[node][FINGER_CLASS]:
-                row = [req["SourceNode"], req["FixedFingers"], req["Time"]]
-                writer = csv.writer(f)
-                writer.writerow(row)
+            if info[node].get(FINGER_CLASS):
+                for req in info[node][FINGER_CLASS]:
+                    row = [req["SourceNode"], req["FixedFingers"], req["Time"]]
+                    writer = csv.writer(f)
+                    writer.writerow(row)
 
 def print_ring_basic(node_list):
     node_list.sort()
@@ -63,8 +65,8 @@ def get_stats(file_data, node_id):
     if classes.get(REQUST_CLASS):
         for request in classes[REQUST_CLASS]:
             # print(request)
-            if num_files < 0:
-                num_files = request['NumFiles']
+            # if num_files < 0:
+            #     num_files = request['NumFiles']
             total_hops += request['Hops']
             misses += 1
             start = datetime.datetime.strptime(request['Start'], "%Y-%m-%dT%H:%M:%S.%f")

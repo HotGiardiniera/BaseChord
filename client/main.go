@@ -205,13 +205,12 @@ func exercise_kube(numFiles int) {
 	var server string
 	servers := make([]string, 0)
 	for _, pod := range pods.Items {
-		if strings.Contains(pod.Name, "chord"){
+		if strings.Contains(pod.Name, "chord") {
 			// log.Printf("Server name %v : %v", pod.Name, pod.Status.PodIP)
 			server = pod.Status.PodIP + ":3000"
 			servers = append(servers, server)
-		}	
+		}
 	}
-
 
 	log.Printf("Storing files at %v", servers[0])
 	fs := Connect(servers[0])
