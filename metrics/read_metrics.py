@@ -84,8 +84,8 @@ def get_stats(file_data, node_id):
 
 def main():
     # Gather metrics
-    # print("Gathering metrics...")
-    # subprocess.call("./gather_from_kube.sh", shell=True)
+    print("Gathering metrics...")
+    subprocess.call("./gather_from_kube.sh", shell=True)
 
     node_ids = list()
     node_stats = dict()
