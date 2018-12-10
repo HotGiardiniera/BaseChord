@@ -147,7 +147,8 @@ func Delete(fs pb.FileSystemClient, fileName, Server string) {
 	}
 }
 
-//TODO make random filename generator
+// TODO make random filename generator
+// TODO for client TODAY make a bunch of calls, add 8  servers, make a few more stores/get add 8 more, get metrics
 
 //------------------------------- LOCAL TESTS --------------------------------//
 func exercise_local(portString string) {
@@ -181,9 +182,9 @@ func exercise_local(portString string) {
 //----------------------------------------------------------------------------//
 //-------------------------------- KUBE TESTS --------------------------------//
 
-func exercise_kube(numPods int) {
-	files := make([]string, 100) // Will hash nearish to each other
-	for i := 0; i < 100; i++ {
+func exercise_kube(numFiles int) {
+	files := make([]string, numFiles) // Will hash nearish to each other
+	for i := 0; i < numFiles; i++ {
 		files[i] = fmt.Sprintf("File%v", i)
 	}
 
@@ -202,9 +203,10 @@ func exercise_kube(numPods int) {
 	}
 
 	var server string
-	servers := make([]string, numPods)
+	servers := make([]string, 0)
 	for _, pod := range pods.Items {
 		if strings.Contains(pod.Name, "chord"){
+			// log.Printf("Server name %v : %v", pod.Name, pod.Status.PodIP)
 			server = pod.Status.PodIP + ":3000"
 			servers = append(servers, server)
 		}	
@@ -242,9 +244,9 @@ func main() {
 
 	//Kube exercising
 	var kube bool
-	var numPods int
+	var files int
 	flag.BoolVar(&kube, "kube", false, "Store/Get 100 files from kube")
-	flag.IntVar(&numPods, "pods", 0, "Number of kubernetes pods")
+	flag.IntVar(&files, "files", 100, "Number of files to generate")
 
 	flag.StringVar(&endpoint, "endpoint", "127.0.0.1:3000", "Client endpoint")
 	flag.StringVar(&call, "call", "", "Choose single functions to run or OG main")
@@ -258,7 +260,7 @@ func main() {
 		exercise_local(localPorts)
 		return
 	} else if kube {
-		exercise_kube(numPods)
+		exercise_kube(files)
 		return
 	}
 
