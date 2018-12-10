@@ -35,6 +35,7 @@ type RequestMetric struct {
 	DestNode   uint64
 	FileID     uint64
 	Hops       uint32
+    NumFiles   uint64
 	Start      JSONTime
 	End        JSONTime
 }
@@ -50,7 +51,8 @@ type FingerMetric struct {
 	Class        uint32
 	SourceNode   uint64
 	FixedFingers uint64
-}
+    Time         JSONTime
+} 
 
 // metricType implementation for FingerMetric
 func (fm FingerMetric) metricType() uint32 {

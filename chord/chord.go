@@ -435,7 +435,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 						op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: node.SuccessorIp}}}
 						// TODO `DestNode` needs to come from the RPC response
 						metricWriteChan <- RequestMetric{Class: REQUSTMETRIC, SourceNode: chord.ID,
-							DestNode: node.FinalDest, Hops: node.Jumps, FileID: location,
+							DestNode: node.FinalDest, Hops: node.Jumps, FileID: location, NumFiles: uint64(len(fs.fileSystem)),
 							Start: startTime, End: endTime}
 					}
 				}
@@ -469,7 +469,7 @@ func runChord(fs *FileSystem, myIP string, myID uint64, port int, joinNode strin
 				chord.finger[ff.nextID] = ff.ret.SuccessorId
 				chord.fixedFingersCounter++
 				metricWriteChan <- FingerMetric{Class: FINGERMETRIC, SourceNode: chord.ID,
-					FixedFingers: chord.fixedFingersCounter}
+					FixedFingers: chord.fixedFingersCounter, Time: JSONTime(time.Now())}
 			}
 			addToRing(ff.ret.SuccessorId, ff.ret.SuccessorIp, chord.ringMap)
 
