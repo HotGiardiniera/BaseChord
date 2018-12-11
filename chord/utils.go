@@ -63,7 +63,8 @@ func truncateBits(m int, base64Rep uint64) uint64 {
 // To handle that case (i.e in find successors) we can just first check if the key == successor
 func between(key, ID, successorID uint64, inclusive bool) bool {
 	// If a high node's successor wraps the ring past 0
-	if ID >= successorID { // We are wrapping
+	// if ID >= successorID { // We are wrapping
+	if ID > successorID { // We are wrapping
 		return key > ID || key < successorID || (inclusive && key == successorID)
 	}
 	return (key > ID && key < successorID) || (inclusive && key == successorID)
@@ -104,10 +105,11 @@ func restartTimer(timer *time.Timer, timeout int64) {
 // Check if we should replace our finger table entry with this value
 func replaceFingerEntry(chordID, entry, currentEntry, candidateEntry uint64) bool {
 	fingOne := (chordID + PowTwo(entry)) % PowTwo(M)
-	fingTwo := (chordID + PowTwo(entry+1)) % PowTwo(M)
+	// fingTwo := (chordID + PowTwo(entry+1)) % PowTwo(M)
 	// log.Printf(magenta("Comparing fingers %v & %v: Is %v between %v-%v and less than %v?"),
 	// 	entry, entry+1, candidateEntry, fingOne, fingTwo, currentEntry)
-	return between(candidateEntry, fingOne, fingTwo, false) && candidateEntry < currentEntry
+	return between(candidateEntry, fingOne, currentEntry, false)
+	// return between(candidateEntry, fingOne, fingTwo, false) && candidateEntry < currentEntry
 }
 
 /* ********************  Color Printing ******************** */

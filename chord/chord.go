@@ -233,7 +233,7 @@ func (kord *Chord) FixFingersInternal(enablePiggyBack bool) {
 	if kord.next == 0 && !kord.enablePiggyBackInternally && enablePiggyBack {
 		log.Printf(magenta("Enabling message piggybacking!"))
 		kord.enablePiggyBackInternally = true && enablePiggyBack
-		kord.stabilizeTimeout = StabilizeTimeoutSlowDown
+		//kord.stabilizeTimeout = StabilizeTimeoutSlowDown
 	}
 	nextEntry := (kord.ID + PowTwo(kord.next)) % PowTwo(M)
 	// log.Printf("Looking for successor of finger table index %v. Finding successor for key %v", kord.next+1, nextEntry)

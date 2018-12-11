@@ -79,7 +79,7 @@ def boot_more(args):
         chord_args = ['chord']
         chord_args += ['-join', peer0_node]
         if args.piggyBack > 0:
-            chords_args += ['-enablePiggyBack', args.piggyBack]
+            chord_args += ['-piggy']
         pod_spec['spec']['containers'][0]['command'] = chord_args
         service_spec =  spec_copy[1]
         # Create a service spec for this service
@@ -113,7 +113,7 @@ def boot(args):
             if i > 0:
                 chord_args += ['-join', peer0_node]
             if args.piggyBack > 0:
-                chord_args += ['-enablePiggyBack', args.piggyBack]
+                chord_args += ['-piggy']
             pod_spec['spec']['containers'][0]['command'] = chord_args
 
             service_spec =  spec_copy[1]

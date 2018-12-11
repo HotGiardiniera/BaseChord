@@ -8,7 +8,7 @@ import kube
 
 def main():
     # Launch chord ring with 8 nodes
-    subprocess.call("./kube.py boot 8 0", shell=True)
+    subprocess.call("./kube.py boot 8 1", shell=True)
     print("Launched ring")
     # Wait 15 seconds for ring to stabilize
     time.sleep(15)
@@ -18,7 +18,7 @@ def main():
     print("Made first 50")
 
     # Add 4 more nodes to ring
-    subprocess.call("./kube.py add 4 0", shell=True)
+    subprocess.call("./kube.py add 4 1", shell=True)
     print("Added 4 nodes")
     # Wait 20 seconds for ring to stabilize
     time.sleep(30)
@@ -27,7 +27,7 @@ def main():
     print("Made second 50")
 
     # Add 4 more nodes to ring
-    subprocess.call("./kube.py add 4 0", shell=True)
+    subprocess.call("./kube.py add 4 1", shell=True)
     print("Added 4 nodes")
     # Wait 20 seconds for ring to stabilize
     time.sleep(30)
